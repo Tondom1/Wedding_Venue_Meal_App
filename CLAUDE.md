@@ -13,6 +13,9 @@ Read this file at the start of every session in this folder. It records what the
 
 ## 2. Current state (as of 2026-10-08)
 
+Phases A–F of section 4 are **built on `dev`** (scaling, guests box, events, combined shopping list, CSV/print). Not yet pushed or released.
+
+
 Everything in `PLAN.md` (Phases 1–6) **is built and working** in `app.py`, `schema.sql` and `templates/`:
 - add, edit and delete meals (name, ingredients one per line, recipe, optional photo)
 - a home page grid with search by meal name or ingredient
@@ -81,13 +84,14 @@ These answers override `PLAN.md`'s "out of scope" line for *ingredient quantity/
 - `20 lb` → **`20 lb`**. When the rounded value equals the exact value and the unit didn't change, leave out the parentheses.
 - Lines with no leading amount (`pepper to taste`) are shown as typed and marked **"not scaled"**.
 
-**Rounding:** this is a purchase list, so always round **up**. Round to a whole number of the convenient unit. If the amount is under 1 of that unit, round up to the nearest ¼ (e.g. `0.3 tsp` → `¼ tsp`, shown as `0.25 tsp` or `¼ tsp`). Count items with no unit (`3 eggs`) round up to whole numbers. In the parentheses, show the exact value with at most 2 decimals and trailing zeros trimmed.
+**Rounding:** this is a purchase list, so always round **up**. Round to a whole number of the convenient unit. If the amount is under 1 of that unit, round up to the nearest ¼ (e.g. `0.3 tsp` → `½ tsp`, shown with ¼ ½ ¾ symbols). Count items with no unit (`3 eggs`) round up to whole numbers. In the parentheses, show the exact value with at most 2 decimals and trailing zeros trimmed.
 
 **Conversion:** use a small built-in table. Never convert between US and metric, and never between weight and volume.
 - US volume ladder: `tsp → tbsp → cup → qt → gal` (3 tsp = 1 tbsp, 16 tbsp = 1 cup, 4 cups = 1 qt, 4 qt = 1 gal). Also recognize `fl oz` (8 fl oz = 1 cup) and `pt` (2 cups) as input units, but don't choose them as targets.
 - US weight: `oz → lb` (16 oz = 1 lb). A plain `oz` means **weight**. Only `fl oz` is volume.
 - Metric: `g → kg` (1000), `ml → l` (1000).
-- The "most convenient unit" is the **largest unit on the ladder where the amount is ≥ 1**.
+- The "most convenient unit" is the **largest unit on the ladder where the amount is ≥ 1 _and_ rounding up adds no more than 25%**; otherwise step down a unit. (Built 2026-10-08: without this, 50 cups became 4 gal = +28%; now it shows 13 qt.) The threshold is `MAX_ROUNDING_EXTRA` in `scaling.py`.
+- When a combined-list row merges lines typed in different units, the bracketed exact amount is shown in the convenient unit (e.g. `5 gal (4.69 gal)`).
 - Recognize common spellings and plurals case-insensitively: tsp/teaspoon(s)/t, tbsp/tablespoon(s)/T, cup(s)/c, oz/ounce(s), lb/lbs/pound(s), g/gram(s), kg, ml, l/liter(s)/litre(s), qt/quart(s), pt/pint(s), gal/gallon(s), fl oz. Show units in a consistent short form with correct singular or plural.
 - Any unit word not in the table (`cans`, `cloves`, `bunches`) is just part of the item name. Its amount still scales and rounds up, but it never converts.
 
@@ -105,15 +109,15 @@ Put the parsing, scaling, conversion, rounding and formatting into **one small m
 - [x] A.3 If a meal's servings is still 1, show a gentle note on its page reminding the owner to check the servings number.
 
 ### Phase B — Scaling module
-- [ ] B.1 Build `scaling.py`: `parse_line`, `scale`, `to_convenient_unit`, `round_up_for_purchase`, `format_amount`. Return structured results (amount, unit, item, scaled flag) so the event list can sum them.
-- [ ] B.2 Write `test_scaling.py`, covering fractions, mixed numbers, every unit ladder, the parentheses rules, unscaled lines and count items.
+- [x] B.1 Build `scaling.py`: `parse_line`, `scale`, `to_convenient_unit`, `round_up_for_purchase`, `format_amount`. Return structured results (amount, unit, item, scaled flag) so the event list can sum them.
+- [x] B.2 Write `test_scaling.py`, covering fractions, mixed numbers, every unit ladder, the parentheses rules, unscaled lines and count items.
 
 ### Phase C — Guests box on the meal page
-- [ ] C.1 On `meal_detail.html`, add a GET form with a `guests` input → `/meals/<id>?guests=150`. Show a heading like "Shopping list for 150 guests (recipe serves 8, ×18.75)" and the scaled list using the display rule. Keep the number in the box after submitting.
-- [ ] C.2 Ignore an invalid `guests` value (0, negative, text) and show a friendly message. With no `guests`, show the normal list.
+- [x] C.1 On `meal_detail.html`, add a GET form with a `guests` input → `/meals/<id>?guests=150`. Show a heading like "Shopping list for 150 guests (recipe serves 8, ×18.75)" and the scaled list using the display rule. Keep the number in the box after submitting.
+- [x] C.2 Ignore an invalid `guests` value (0, negative, text) and show a friendly message. With no `guests`, show the normal list.
 
 ### Phase D — Events
-- [ ] D.1 Add the tables:
+- [x] D.1 Add the tables:
   ```sql
   CREATE TABLE IF NOT EXISTS events (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -133,7 +137,7 @@ Put the parsing, scaling, conversion, rounding and formatting into **one small m
   );
   ```
   Turn on `PRAGMA foreign_keys = ON` in `get_db()`.
-- [ ] D.2 Routes, all server-rendered:
+- [x] D.2 Routes, all server-rendered:
   | Method | URL | Purpose |
   |---|---|---|
   | GET | `/events` | list events (newest date first) |
@@ -145,20 +149,20 @@ Put the parsing, scaling, conversion, rounding and formatting into **one small m
   | POST | `/events/<id>/meals/<event_meal_id>/delete` | remove a meal from the event |
   | GET | `/events/<id>/shopping-list` | combined list |
   | GET | `/events/<id>/shopping-list.csv` | CSV export |
-- [ ] D.3 The per-meal headcount is optional. It covers cases like "80 chicken, 40 fish" at the same wedding, and when left empty the event's guest count is used.
-- [ ] D.4 Add "Events" to the nav in `base.html`. Deleting a meal that's used in events should warn that it will be removed from those events.
+- [x] D.3 The per-meal headcount is optional. It covers cases like "80 chicken, 40 fish" at the same wedding, and when left empty the event's guest count is used.
+- [x] D.4 Add "Events" to the nav in `base.html`. Deleting a meal that's used in events should warn that it will be removed from those events.
 
 ### Phase E — Combined shopping list + export
-- [ ] E.1 For each meal in the event, scale its lines by `headcount / servings`.
-- [ ] E.2 **Merge** lines that are the same item: match on the item name after lowercasing and trimming spaces, within the same kind of unit (US volume, US weight, metric weight, metric volume, or count/other). Sum them in the smallest unit of that kind **before** converting and rounding, so rounding happens once per item rather than per meal. Items that can't be merged (different kinds of unit) appear as separate rows.
-- [ ] E.3 Each row shows the item, the amount (by the display rule) and a small "used in: Meal A, Meal B" note. Sort alphabetically by item. List "not scaled" lines in their own section, with the meal each one came from.
-- [ ] E.4 Export:
+- [x] E.1 For each meal in the event, scale its lines by `headcount / servings`.
+- [x] E.2 **Merge** lines that are the same item: match on the item name after lowercasing and trimming spaces, within the same kind of unit (US volume, US weight, metric weight, metric volume, or count/other). Sum them in the smallest unit of that kind **before** converting and rounding, so rounding happens once per item rather than per meal. Items that can't be merged (different kinds of unit) appear as separate rows.
+- [x] E.3 Each row shows the item, the amount (by the display rule) and a small "used in: Meal A, Meal B" note. Sort alphabetically by item. List "not scaled" lines in their own section, with the meal each one came from.
+- [x] E.4 Export:
   - **CSV download**, built with Python's `csv` module (no new packages), with the columns Item, Amount, Unit, Exact amount, Original unit, Used in. Send it with `Content-Disposition: attachment; filename="<event-name>-shopping-list.csv"` and a UTF-8 BOM so Excel opens it cleanly.
   - **Print / Save as PDF:** add a `@media print` stylesheet that hides the nav and buttons, plus a "Print" link.
-- [ ] E.5 Tell the owner in the README that items only merge if they're spelled the same way in every meal ("chicken thighs" ≠ "chicken thigh").
+- [x] E.5 Tell the owner in the README that items only merge if they're spelled the same way in every meal ("chicken thighs" ≠ "chicken thigh").
 
 ### Phase F — README
-- [ ] F.1 Explain: running `migrate` once (back up first), the amount-first ingredient format with examples, the guests box, events, and exporting the list.
+- [x] F.1 Explain: running `migrate` once (back up first), the amount-first ingredient format with examples, the guests box, events, and exporting the list.
 
 ### Check steps
 - Run the migration on a **copy** of an existing database: existing meals survive, and `servings` = 1 for each. Running it twice is harmless.

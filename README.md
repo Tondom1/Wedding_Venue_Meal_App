@@ -98,16 +98,45 @@ When you're finished, go back to the terminal and press **Ctrl + C** to stop the
 - **Add a meal:** click **Add Meal**. Type the name, enter how many people the recipe **serves**, list the ingredients (**one per line, amount first**, for example `2 lb chicken thighs`), add the recipe, and optionally choose a photo. Then click **Save**.
 - **Find a meal:** use the search box on the home page. You can search by meal name or by an ingredient (for example `chicken`).
 - **See what to buy:** click a meal to see its ingredient list and recipe.
+- **Scale a meal for your guests:** open a meal, type the number of guests in the box and click **Scale**. Each amount is **rounded up** for buying and changed to the handiest unit, with the exact amount in brackets. For example, `13 qt (50 cups)`.
 - **Change a meal:** open the meal and click **Edit**. You can also replace or remove its photo there.
 - **Delete a meal:** open the meal and click **Delete**.
 
 Photos can be PNG, JPG, GIF or WEBP, up to 5 MB.
 
+### Typing ingredients so they scale
+
+Put the **amount first**, then the unit (optional), then the ingredient, one per line:
+
+```
+2 cups rice
+1 1/2 lb chicken thighs
+1/2 tsp salt
+3 eggs
+2 cans crushed tomatoes
+pepper to taste
+```
+
+- Amounts can be whole numbers (`3`), decimals (`1.5`), fractions (`1/2`) or mixed numbers (`1 1/2`).
+- Units the app understands and converts: **tsp, tbsp, cup, fl oz, pt, qt, gal, oz, lb, g, kg, ml, l** (full names like "tablespoons" or "pounds" work too). `oz` means weight; write `fl oz` for liquid ounces.
+- Other words, like `cans` or `cloves`, still scale but aren't converted.
+- A line with no amount at the start, such as "pepper to taste", isn't scaled. It's listed separately so you remember to check it.
+- US and metric units are never mixed, and weight is never turned into volume.
+
+### Events and shopping lists
+
+1. Click **Events**, then **New Event**. Enter a name, the date (optional) and the number of guests.
+2. Add each meal being served. Leave **"Making it for"** empty to use the event's guest count, or enter a number when only some guests get that dish (for example, 80 chicken and 40 fish).
+3. Click **View shopping list** to see everything you need, combined into one list.
+4. Click **Download for Excel (CSV)** to save the list as a spreadsheet, or **Print / Save as PDF**.
+
+Ingredients only combine when they're **spelled the same way** in every meal. "chicken thighs" and "chicken thigh" will show up as two separate lines. Capital letters don't matter. Deleting an event never deletes your meals.
+
 ---
 
 ## Where your data is stored
 
-- Meals are saved in `instance/meals.db`.
+- Meals and events are saved in `instance/meals.db`.
 - Photos are saved in `static/uploads/`.
 
 To **back up** your meals, copy those two folders somewhere safe.

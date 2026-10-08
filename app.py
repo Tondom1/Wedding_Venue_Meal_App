@@ -1,11 +1,16 @@
+import csv
+import io
 import os
+import re
 import shutil
 import sqlite3
 import uuid
 from datetime import datetime
+from fractions import Fraction
 
 from flask import (
     Flask,
+    Response,
     abort,
     flash,
     g,
@@ -15,6 +20,8 @@ from flask import (
     url_for,
 )
 from werkzeug.utils import secure_filename
+
+import scaling
 
 app = Flask(__name__, instance_relative_config=True)
 app.config.update(
@@ -264,7 +271,24 @@ def new_meal():
 
 @app.route("/meals/<int:meal_id>")
 def meal_detail(meal_id):
-    return render_template("meal_detail.html", meal=get_meal_or_404(meal_id))
+    meal = get_meal_or_404(meal_id)
+    guests_text = request.args.get("guests", "").strip()
+    guests = rows = factor_text = guests_error = None
+    if guests_text:
+        guests = parse_servings(guests_text)
+        if guests is None:
+            guests_error = "Number of guests must be a whole number of 1 or more."
+        else:
+            factor = Fraction(guests, meal["servings"])
+            rows = scaling.scaled_rows(meal["ingredients"], factor)
+            factor_text = scaling.format_exact(factor)
+    event_count = get_db().execute(
+        "SELECT COUNT(*) FROM event_meals WHERE meal_id = ?", (meal_id,)
+    ).fetchone()[0]
+    return render_template(
+        "meal_detail.html", meal=meal, guests_text=guests_text, guests=guests,
+        rows=rows, factor_text=factor_text, guests_error=guests_error, event_count=event_count,
+    )
 
 
 @app.route("/meals/<int:meal_id>/edit", methods=["GET", "POST"])
@@ -323,6 +347,211 @@ def delete_meal(meal_id):
     delete_photo(meal["photo_filename"])
     flash("Meal deleted.", "success")
     return redirect(url_for("index"))
+
+
+# ---------- Events ----------
+
+def get_event_or_404(event_id):
+    event = get_db().execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
+    if event is None:
+        abort(404)
+    return event
+
+
+def read_event_form():
+    return {
+        "name": request.form.get("name", "").strip(),
+        "event_date": request.form.get("event_date", "").strip(),
+        "guests": request.form.get("guests", "").strip(),
+        "notes": request.form.get("notes", "").strip(),
+    }
+
+
+def validate_event_form(form):
+    if not form["name"]:
+        return "Event name is required."
+    if parse_servings(form["guests"]) is None:
+        return "Number of guests must be a whole number of 1 or more."
+    if form["event_date"]:
+        try:
+            datetime.strptime(form["event_date"], "%Y-%m-%d")
+        except ValueError:
+            return "Date must look like 2026-06-20."
+    return None
+
+
+def event_meal_rows(event):
+    """The meals on an event, each with the headcount it is scaled for."""
+    rows = get_db().execute(
+        "SELECT em.id AS event_meal_id, em.guests AS own_guests, m.id AS meal_id, m.name, "
+        "m.servings, m.ingredients FROM event_meals em JOIN meals m ON m.id = em.meal_id "
+        "WHERE em.event_id = ? ORDER BY m.name",
+        (event["id"],),
+    ).fetchall()
+    result = []
+    for r in rows:
+        item = dict(r)
+        item["headcount"] = r["own_guests"] or event["guests"]
+        result.append(item)
+    return result
+
+
+def build_shopping_list(event):
+    meals = event_meal_rows(event)
+    rows, not_scaled = scaling.combined_list(
+        (m["name"], m["ingredients"], Fraction(m["headcount"], m["servings"])) for m in meals
+    )
+    return meals, rows, not_scaled
+
+
+@app.route("/events")
+def events_list():
+    events = get_db().execute(
+        "SELECT e.*, (SELECT COUNT(*) FROM event_meals em WHERE em.event_id = e.id) AS meal_count "
+        "FROM events e ORDER BY e.event_date IS NULL, e.event_date DESC, e.created_at DESC"
+    ).fetchall()
+    return render_template("events.html", events=events)
+
+
+@app.route("/events/new", methods=["GET", "POST"])
+def new_event():
+    if request.method == "GET":
+        return render_template("event_form.html", form={}, title="New Event")
+    form = read_event_form()
+    error = validate_event_form(form)
+    if error:
+        flash(error, "error")
+        return render_template("event_form.html", form=form, title="New Event")
+    db = get_db()
+    cur = db.execute(
+        "INSERT INTO events (name, event_date, guests, notes) VALUES (?, ?, ?, ?)",
+        (form["name"], form["event_date"] or None, parse_servings(form["guests"]), form["notes"]),
+    )
+    db.commit()
+    flash("Event saved. Now add the meals being served.", "success")
+    return redirect(url_for("event_detail", event_id=cur.lastrowid))
+
+
+@app.route("/events/<int:event_id>")
+def event_detail(event_id):
+    event = get_event_or_404(event_id)
+    meals = event_meal_rows(event)
+    used = {m["meal_id"] for m in meals}
+    all_meals = get_db().execute("SELECT id, name FROM meals ORDER BY name").fetchall()
+    available = [m for m in all_meals if m["id"] not in used]
+    return render_template("event_detail.html", event=event, meals=meals, available=available)
+
+
+@app.route("/events/<int:event_id>/edit", methods=["GET", "POST"])
+def edit_event(event_id):
+    event = get_event_or_404(event_id)
+    if request.method == "GET":
+        form = dict(event)
+        form["event_date"] = form["event_date"] or ""
+        return render_template("event_form.html", form=form, title="Edit Event", event=event)
+    form = read_event_form()
+    error = validate_event_form(form)
+    if error:
+        flash(error, "error")
+        return render_template("event_form.html", form=form, title="Edit Event", event=event)
+    db = get_db()
+    db.execute(
+        "UPDATE events SET name = ?, event_date = ?, guests = ?, notes = ?, "
+        "updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        (form["name"], form["event_date"] or None, parse_servings(form["guests"]), form["notes"], event_id),
+    )
+    db.commit()
+    flash("Event updated.", "success")
+    return redirect(url_for("event_detail", event_id=event_id))
+
+
+@app.route("/events/<int:event_id>/delete", methods=["POST"])
+def delete_event(event_id):
+    get_event_or_404(event_id)
+    db = get_db()
+    db.execute("DELETE FROM events WHERE id = ?", (event_id,))
+    db.commit()
+    flash("Event deleted. Your meals were not changed.", "success")
+    return redirect(url_for("events_list"))
+
+
+@app.route("/events/<int:event_id>/meals", methods=["POST"])
+def add_event_meal(event_id):
+    get_event_or_404(event_id)
+    meal_id = parse_servings(request.form.get("meal_id", ""))
+    if meal_id is None:
+        flash("Choose a meal to add.", "error")
+        return redirect(url_for("event_detail", event_id=event_id))
+    get_meal_or_404(meal_id)
+    guests_text = request.form.get("guests", "").strip()
+    guests = None
+    if guests_text:
+        guests = parse_servings(guests_text)
+        if guests is None:
+            flash("Headcount must be a whole number of 1 or more (or leave it empty).", "error")
+            return redirect(url_for("event_detail", event_id=event_id))
+    db = get_db()
+    try:
+        db.execute(
+            "INSERT INTO event_meals (event_id, meal_id, guests) VALUES (?, ?, ?)",
+            (event_id, meal_id, guests),
+        )
+        db.commit()
+    except sqlite3.IntegrityError:
+        flash("That meal is already on this event.", "error")
+        return redirect(url_for("event_detail", event_id=event_id))
+    flash("Meal added.", "success")
+    return redirect(url_for("event_detail", event_id=event_id))
+
+
+@app.route("/events/<int:event_id>/meals/<int:event_meal_id>/delete", methods=["POST"])
+def remove_event_meal(event_id, event_meal_id):
+    db = get_db()
+    cur = db.execute(
+        "DELETE FROM event_meals WHERE id = ? AND event_id = ?", (event_meal_id, event_id)
+    )
+    db.commit()
+    if cur.rowcount == 0:
+        abort(404)
+    flash("Meal removed from the event.", "success")
+    return redirect(url_for("event_detail", event_id=event_id))
+
+
+@app.route("/events/<int:event_id>/shopping-list")
+def shopping_list(event_id):
+    event = get_event_or_404(event_id)
+    meals, rows, not_scaled = build_shopping_list(event)
+    return render_template(
+        "shopping_list.html", event=event, meals=meals, rows=rows, not_scaled=not_scaled
+    )
+
+
+def csv_number(value):
+    return scaling.format_exact(value)
+
+
+@app.route("/events/<int:event_id>/shopping-list.csv")
+def shopping_list_csv(event_id):
+    event = get_event_or_404(event_id)
+    _, rows, not_scaled = build_shopping_list(event)
+    out = io.StringIO()
+    out.write("﻿")  # BOM so Excel reads the file as UTF-8
+    writer = csv.writer(out)
+    writer.writerow(["Item", "Amount", "Unit", "Exact amount", "Original unit", "Used in"])
+    for row in rows:
+        a = row.amount
+        writer.writerow([
+            row.item, csv_number(a.rounded), scaling.unit_label(a.unit, a.rounded),
+            csv_number(a.exact), scaling.unit_label(a.exact_unit, a.exact), ", ".join(row.used_in),
+        ])
+    for row in not_scaled:
+        writer.writerow([row.text, "", "not scaled", "", "", ", ".join(row.used_in)])
+    slug = re.sub(r"[^A-Za-z0-9]+", "-", event["name"]).strip("-").lower() or "event"
+    return Response(
+        out.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{slug}-shopping-list.csv"'},
+    )
 
 
 # ---------- Errors ----------

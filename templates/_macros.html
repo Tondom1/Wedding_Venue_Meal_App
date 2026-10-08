@@ -1,0 +1,9 @@
+{# Shared display for one shopping-list amount: rounded amount, then the exact amount in brackets. #}
+{% macro amount(row) -%}
+  {%- if row.amount -%}
+    <strong>{{ row.amount.main_text }}</strong>
+    {%- if row.amount.show_exact %} <small class="exact">({{ row.amount.exact_text }})</small>{% endif -%}
+  {%- else -%}
+    <small class="not-scaled">not scaled</small>
+  {%- endif -%}
+{%- endmacro %}

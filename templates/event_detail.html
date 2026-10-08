@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}{{ event.name }}{% endblock %}
+{% block content %}
+  <h1>{{ event.name }}</h1>
+  <p>
+    {% if event.event_date %}{{ event.event_date }} · {% endif %}{{ event.guests }} guests
+  </p>
+  {% if event.notes %}<p class="recipe">{{ event.notes }}</p>{% endif %}
+
+  <h2>Meals</h2>
+  {% if meals %}
+    <table>
+      <thead><tr><th>Meal</th><th>Making it for</th><th>Recipe serves</th><th></th></tr></thead>
+      <tbody>
+        {% for m in meals %}
+          <tr>
+            <td><a href="{{ url_for('meal_detail', meal_id=m.meal_id) }}">{{ m.name }}</a></td>
+            <td>{{ m.headcount }} {% if not m.own_guests %}<small class="used-in">(all guests)</small>{% endif %}</td>
+            <td>{{ m.servings }}{% if m.servings == 1 %} <small class="used-in">— check this</small>{% endif %}</td>
+            <td>
+              <form method="post" action="{{ url_for('remove_event_meal', event_id=event.id, event_meal_id=m.event_meal_id) }}" style="margin:0">
+                <button type="submit" class="secondary outline" style="padding: 0.25rem 0.75rem; margin: 0;">Remove</button>
+              </form>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p><a href="{{ url_for('shopping_list', event_id=event.id) }}" role="button">View shopping list</a></p>
+  {% else %}
+    <p>No meals on this event yet. Add one below.</p>
+  {% endif %}
+
+  <h3>Add a meal</h3>
+  {% if available %}
+    <form method="post" action="{{ url_for('add_event_meal', event_id=event.id) }}">
+      <div class="grid">
+        <label>
+          Meal
+          <select name="meal_id" required>
+            {% for meal in available %}
+              <option value="{{ meal.id }}">{{ meal.name }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>
+          Making it for (optional)
+          <input type="number" name="guests" min="1" step="1" placeholder="All {{ event.guests }} guests">
+          <small>Leave empty to use the event's guest count. Use it for choices like "80 chicken, 40 fish".</small>
+        </label>
+      </div>
+      <button type="submit">Add meal</button>
+    </form>
+  {% elif meals %}
+    <p><small>Every saved meal is already on this event.</small></p>
+  {% else %}
+    <p>You don't have any saved meals yet. <a href="{{ url_for('new_meal') }}">Add a meal</a> first.</p>
+  {% endif %}
+
+  <hr>
+  <div role="group">
+    <a href="{{ url_for('edit_event', event_id=event.id) }}" role="button" class="secondary">Edit event</a>
+    <form method="post" action="{{ url_for('delete_event', event_id=event.id) }}" style="margin: 0;">
+      <button type="submit" class="secondary outline" onclick="return confirm('Delete this event? Your saved meals will not be deleted.')">Delete event</button>
+    </form>
+  </div>
+{% endblock %}

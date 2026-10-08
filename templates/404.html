@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Not found{% endblock %}
 {% block content %}
-  <h1>Meal not found</h1>
+  <h1>Not found</h1>
+  <p>That meal or event doesn't exist (it may have been deleted).</p>
   <p><a href="{{ url_for('index') }}">Back to all meals</a></p>
 {% endblock %}
