@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Upgrade needed{% endblock %}
+{% block content %}
+  <h1>One-time upgrade needed</h1>
+  <p>This version of the app needs to add a few things to your saved meals database
+     (for example, moving each meal's ingredients into the new ingredients table).
+     Your meals will not be changed or deleted, and a backup copy is made automatically first.</p>
+  <ol>
+    <li>Go to the terminal running the app and press <kbd>Ctrl</kbd> + <kbd>C</kbd> to stop it.</li>
+    <li>Run: <pre><code>.\.venv\Scripts\python -m flask --app app migrate</code></pre></li>
+    <li>Start the app again: <pre><code>.\.venv\Scripts\python -m flask --app app run</code></pre></li>
+  </ol>
+{% endblock %}

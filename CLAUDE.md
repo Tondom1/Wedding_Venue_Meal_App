@@ -13,6 +13,9 @@ Read this file at the start of every session in this folder. It records what the
 
 ## 2. Current state (as of 2026-10-08)
 
+Phases A–G of section 4 (scaling, guests box, events, combined shopping list, CSV/print, ingredient table) and Phase H (desktop application, section 4b) are **built and pushed to `dev`**. Nothing is released to `main` yet.
+
+
 Everything in `PLAN.md` (Phases 1–6) **is built and working** in `app.py`, `schema.sql` and `templates/`:
 - add, edit and delete meals (name, ingredients one per line, recipe, optional photo)
 - a home page grid with search by meal name or ingredient
@@ -24,14 +27,22 @@ Housekeeping notes:
 - The `[ ]` checkboxes in `PLAN.md` were never ticked, even though the work is done. Don't take that to mean the work is missing.
 - `PLAN.md` says the folder is `meal-app/`. The real folder is `C:\Claude Projects\Wedding_Venue_Meal_App`.
 - `PLAN.md` asks for Python 3.10+, but `README.md` says 3.9+ and `__pycache__` shows **Python 3.9** in use. Keep code **3.9-compatible**: no `match`, and no `X | Y` type hints.
-- There is no `instance/` folder in this copy. The owner's real `meals.db` may be in a different copy of the app. Assume real data exists somewhere and treat it as precious.
+- The owner's real data is in **two places**, both precious: `%LOCALAPPDATA%\MealKeeper` (used by `Event Shopping List.exe`, the copy the owner now works in) and `instance/` + `static/uploads/` in this folder (used by `flask run`; copied to the first on 2026-10-08 and separate since).
 - `future_plans.md` (login, CSRF, hosting) is **not started**. Don't work on it unless the owner asks.
 
 ## 3. Fixed rules carried over from PLAN.md (always follow)
 
-**Stack, which must not change:** Python + **Flask only** (server-rendered Jinja2), the built-in `sqlite3` module, and Pico.css from the CDN. No other pip packages, no ORM, no JS framework, no build step. Small inline vanilla JS is fine only if it's truly necessary. Prefer plain HTML forms.
+**Stack, which must not change:** Python + **Flask only** (server-rendered Jinja2), the built-in `sqlite3` module, and Pico.css from the CDN. No other pip packages, no ORM, no JS framework, no build step. **One exception, approved by the owner on 2026-10-08:** `pywebview` (the app window) and `PyInstaller` (builds the `.exe`), listed in `requirements-desktop.txt` and used only by `desktop.py` and the build command. Small inline vanilla JS is fine only if it's truly necessary (currently just the add/remove buttons on the ingredient table). Prefer plain HTML forms.
 
 **Platform:** Windows. Give commands in **PowerShell** form, e.g. `.\.venv\Scripts\python -m flask --app app run`.
+
+**Git / GitHub (owner's rule):** the repo is `Tondom1/Wedding_Venue_Meal_App`.
+- The owner's folder `C:\Claude Projects\Wedding_Venue_Meal_App` is the **working copy, checked out on `dev`**. Make every code change **directly in that folder**, so the owner can run and look at it before anything goes online.
+- Local commits on `dev` are fine. **Do not push anything to GitHub until the owner says it looks good.**
+- **Never commit, merge or push to `main` unless the owner says a release is ready.** `main` holds releases only.
+- `v1-checkpoint` is a frozen copy of the original working app. Never change it.
+- How to push when approved: when running in **Claude Code on the owner's computer**, just `git push origin dev` (the owner's own Git login is used). Only if working from a cloud session linked to the computer, which has no GitHub login there: make a bundle on the computer (`git bundle create x.bundle origin/dev..dev`), stage it into the cloud workspace, fetch it into a clone there, push from the clone, then delete the bundle file from the owner's folder.
+- Line endings: the repo stores LF, and the owner's Windows Git converts on checkout. A file that differs only by CRLF isn't a real change (`git diff --ignore-cr-at-eol`).
 
 **Way of working:**
 - Keep it simple and don't add features the owner didn't ask for.
@@ -73,18 +84,21 @@ These answers override `PLAN.md`'s "out of scope" line for *ingredient quantity/
 - `20 lb` → **`20 lb`**. When the rounded value equals the exact value and the unit didn't change, leave out the parentheses.
 - Lines with no leading amount (`pepper to taste`) are shown as typed and marked **"not scaled"**.
 
-**Rounding:** this is a purchase list, so always round **up**. Round to a whole number of the convenient unit. If the amount is under 1 of that unit, round up to the nearest ¼ (e.g. `0.3 tsp` → `¼ tsp`, shown as `0.25 tsp` or `¼ tsp`). Count items with no unit (`3 eggs`) round up to whole numbers. In the parentheses, show the exact value with at most 2 decimals and trailing zeros trimmed.
+**Rounding:** this is a purchase list, so always round **up**. Round to a whole number of the convenient unit. If the amount is under 1 of that unit, round up to the nearest ¼ (e.g. `0.3 tsp` → `½ tsp`, shown with ¼ ½ ¾ symbols). Count items with no unit (`3 eggs`) round up to whole numbers. In the parentheses, show the exact value with at most 2 decimals and trailing zeros trimmed.
 
 **Conversion:** use a small built-in table. Never convert between US and metric, and never between weight and volume.
 - US volume ladder: `tsp → tbsp → cup → qt → gal` (3 tsp = 1 tbsp, 16 tbsp = 1 cup, 4 cups = 1 qt, 4 qt = 1 gal). Also recognize `fl oz` (8 fl oz = 1 cup) and `pt` (2 cups) as input units, but don't choose them as targets.
 - US weight: `oz → lb` (16 oz = 1 lb). A plain `oz` means **weight**. Only `fl oz` is volume.
 - Metric: `g → kg` (1000), `ml → l` (1000).
-- The "most convenient unit" is the **largest unit on the ladder where the amount is ≥ 1**.
+- The "most convenient unit" is the **largest unit on the ladder where the amount is ≥ 1 _and_ rounding up adds no more than 25%**; otherwise step down a unit. (Built 2026-10-08: without this, 50 cups became 4 gal = +28%; now it shows 13 qt.) The threshold is `MAX_ROUNDING_EXTRA` in `scaling.py`.
+- When a combined-list row merges lines typed in different units, the bracketed exact amount is shown in the convenient unit (e.g. `5 gal (4.69 gal)`).
 - Recognize common spellings and plurals case-insensitively: tsp/teaspoon(s)/t, tbsp/tablespoon(s)/T, cup(s)/c, oz/ounce(s), lb/lbs/pound(s), g/gram(s), kg, ml, l/liter(s)/litre(s), qt/quart(s), pt/pint(s), gal/gallon(s), fl oz. Show units in a consistent short form with correct singular or plural.
 - Any unit word not in the table (`cans`, `cloves`, `bunches`) is just part of the item name. Its amount still scales and rounds up, but it never converts.
 
 ### Ingredient line format
-Keep `ingredients` as plain text, one per line. A line is `<amount> [unit] <item>`:
+> **Superseded by Phase G:** ingredients are now entered in a table and stored as rows in `meal_ingredients`. The line format below still describes how the old text is converted, and how `meals.ingredients` (the plain-text copy kept for search) is written.
+
+Originally, `ingredients` was plain text, one per line. A line is `<amount> [unit] <item>`:
 - the amount can be a whole number `3`, a decimal `1.5`, a fraction `1/2`, or a mixed number `1 1/2`
 - the unit is optional and comes from the table above
 - the item is everything else, kept exactly as typed
@@ -92,20 +106,20 @@ Keep `ingredients` as plain text, one per line. A line is `<amount> [unit] <item
 Put the parsing, scaling, conversion, rounding and formatting into **one small module of pure functions** (e.g. `scaling.py`), shared by the meal page and the event list. Cover it with a `test_scaling.py` that uses only the built-in `unittest`.
 
 ### Phase A — Servings + safe migration
-- [ ] A.1 Add `servings INTEGER NOT NULL DEFAULT 1` to `meals`. Do it in `schema.sql` for fresh installs, and through an idempotent `flask --app app migrate` command for existing databases (`PRAGMA table_info` check, then `ALTER TABLE ... ADD COLUMN`). The same command creates the event tables from Phase D with `CREATE TABLE IF NOT EXISTS`.
-- [ ] A.2 Meal form: add a required "Serves (number of people)" field (`min="1"`, `step="1"`) and validate it on the server. Change the ingredients placeholder to `One per line, amount first — e.g. 2 lb chicken thighs`.
-- [ ] A.3 If a meal's servings is still 1, show a gentle note on its page reminding the owner to check the servings number.
+- [x] A.1 (Done: `migrate` also saves an automatic backup `instance/meals-backup-<date>.db` before changing anything, and the app shows a friendly "upgrade needed" page until it's run.) Add `servings INTEGER NOT NULL DEFAULT 1` to `meals`. Do it in `schema.sql` for fresh installs, and through an idempotent `flask --app app migrate` command for existing databases (`PRAGMA table_info` check, then `ALTER TABLE ... ADD COLUMN`). The same command creates the event tables from Phase D with `CREATE TABLE IF NOT EXISTS`.
+- [x] A.2 Meal form: add a required "Serves (number of people)" field (`min="1"`, `step="1"`) and validate it on the server. Change the ingredients placeholder to `One per line, amount first — e.g. 2 lb chicken thighs`.
+- [x] A.3 If a meal's servings is still 1, show a gentle note on its page reminding the owner to check the servings number.
 
 ### Phase B — Scaling module
-- [ ] B.1 Build `scaling.py`: `parse_line`, `scale`, `to_convenient_unit`, `round_up_for_purchase`, `format_amount`. Return structured results (amount, unit, item, scaled flag) so the event list can sum them.
-- [ ] B.2 Write `test_scaling.py`, covering fractions, mixed numbers, every unit ladder, the parentheses rules, unscaled lines and count items.
+- [x] B.1 Build `scaling.py`: `parse_line`, `scale`, `to_convenient_unit`, `round_up_for_purchase`, `format_amount`. Return structured results (amount, unit, item, scaled flag) so the event list can sum them.
+- [x] B.2 Write `test_scaling.py`, covering fractions, mixed numbers, every unit ladder, the parentheses rules, unscaled lines and count items.
 
 ### Phase C — Guests box on the meal page
-- [ ] C.1 On `meal_detail.html`, add a GET form with a `guests` input → `/meals/<id>?guests=150`. Show a heading like "Shopping list for 150 guests (recipe serves 8, ×18.75)" and the scaled list using the display rule. Keep the number in the box after submitting.
-- [ ] C.2 Ignore an invalid `guests` value (0, negative, text) and show a friendly message. With no `guests`, show the normal list.
+- [x] C.1 On `meal_detail.html`, add a GET form with a `guests` input → `/meals/<id>?guests=150`. Show a heading like "Shopping list for 150 guests (recipe serves 8, ×18.75)" and the scaled list using the display rule. Keep the number in the box after submitting.
+- [x] C.2 Ignore an invalid `guests` value (0, negative, text) and show a friendly message. With no `guests`, show the normal list.
 
 ### Phase D — Events
-- [ ] D.1 Add the tables:
+- [x] D.1 Add the tables:
   ```sql
   CREATE TABLE IF NOT EXISTS events (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -125,7 +139,7 @@ Put the parsing, scaling, conversion, rounding and formatting into **one small m
   );
   ```
   Turn on `PRAGMA foreign_keys = ON` in `get_db()`.
-- [ ] D.2 Routes, all server-rendered:
+- [x] D.2 Routes, all server-rendered:
   | Method | URL | Purpose |
   |---|---|---|
   | GET | `/events` | list events (newest date first) |
@@ -137,20 +151,20 @@ Put the parsing, scaling, conversion, rounding and formatting into **one small m
   | POST | `/events/<id>/meals/<event_meal_id>/delete` | remove a meal from the event |
   | GET | `/events/<id>/shopping-list` | combined list |
   | GET | `/events/<id>/shopping-list.csv` | CSV export |
-- [ ] D.3 The per-meal headcount is optional. It covers cases like "80 chicken, 40 fish" at the same wedding, and when left empty the event's guest count is used.
-- [ ] D.4 Add "Events" to the nav in `base.html`. Deleting a meal that's used in events should warn that it will be removed from those events.
+- [x] D.3 The per-meal headcount is optional. It covers cases like "80 chicken, 40 fish" at the same wedding, and when left empty the event's guest count is used.
+- [x] D.4 Add "Events" to the nav in `base.html`. Deleting a meal that's used in events should warn that it will be removed from those events.
 
 ### Phase E — Combined shopping list + export
-- [ ] E.1 For each meal in the event, scale its lines by `headcount / servings`.
-- [ ] E.2 **Merge** lines that are the same item: match on the item name after lowercasing and trimming spaces, within the same kind of unit (US volume, US weight, metric weight, metric volume, or count/other). Sum them in the smallest unit of that kind **before** converting and rounding, so rounding happens once per item rather than per meal. Items that can't be merged (different kinds of unit) appear as separate rows.
-- [ ] E.3 Each row shows the item, the amount (by the display rule) and a small "used in: Meal A, Meal B" note. Sort alphabetically by item. List "not scaled" lines in their own section, with the meal each one came from.
-- [ ] E.4 Export:
+- [x] E.1 For each meal in the event, scale its lines by `headcount / servings`.
+- [x] E.2 **Merge** lines that are the same item: match on the item name after lowercasing and trimming spaces, within the same kind of unit (US volume, US weight, metric weight, metric volume, or count/other). Sum them in the smallest unit of that kind **before** converting and rounding, so rounding happens once per item rather than per meal. Items that can't be merged (different kinds of unit) appear as separate rows.
+- [x] E.3 Each row shows the item, the amount (by the display rule) and a small "used in: Meal A, Meal B" note. Sort alphabetically by item. List "not scaled" lines in their own section, with the meal each one came from.
+- [x] E.4 Export:
   - **CSV download**, built with Python's `csv` module (no new packages), with the columns Item, Amount, Unit, Exact amount, Original unit, Used in. Send it with `Content-Disposition: attachment; filename="<event-name>-shopping-list.csv"` and a UTF-8 BOM so Excel opens it cleanly.
   - **Print / Save as PDF:** add a `@media print` stylesheet that hides the nav and buttons, plus a "Print" link.
-- [ ] E.5 Tell the owner in the README that items only merge if they're spelled the same way in every meal ("chicken thighs" ≠ "chicken thigh").
+- [x] E.5 Tell the owner in the README that items only merge if they're spelled the same way in every meal ("chicken thighs" ≠ "chicken thigh").
 
 ### Phase F — README
-- [ ] F.1 Explain: running `migrate` once (back up first), the amount-first ingredient format with examples, the guests box, events, and exporting the list.
+- [x] F.1 Explain: running `migrate` once (back up first), the amount-first ingredient format with examples, the guests box, events, and exporting the list.
 
 ### Check steps
 - Run the migration on a **copy** of an existing database: existing meals survive, and `servings` = 1 for each. Running it twice is harmless.
@@ -160,6 +174,26 @@ Put the parsing, scaling, conversion, rounding and formatting into **one small m
 - Event: 120 guests, two meals that both use `rice` (one in cups, one in tbsp) produce **one** merged rice row. Removing a meal from the event updates the list. Deleting the event leaves its meals intact.
 - The CSV opens in Excel with correct columns, and the print view hides the nav and buttons.
 - `python -m unittest test_scaling` passes, and all earlier `PLAN.md` acceptance checks still pass.
+
+### Phase G — Ingredient table (owner request, 2026-10-08)
+The owner asked for separate boxes instead of one big text box, so users don't have to type in a special format.
+- [x] G.1 New table `meal_ingredients(id, meal_id → meals ON DELETE CASCADE, position, quantity TEXT, unit TEXT, name TEXT NOT NULL)`. The quantity is stored **as typed** (e.g. `1 1/2`) and parsed when scaling. This table is the source of truth.
+- [x] G.2 `meals.ingredients` is still written on every save, as a one-per-line text copy. It's used for search, and lets `v1-checkpoint` still read the data in a rollback.
+- [x] G.3 `migrate` creates the table and splits each meal's old text into rows (`scaling.split_line`). It's resumable: it converts any meal that has no rows, and the app shows the upgrade page while such meals exist.
+- [x] G.4 Meal form: a Quantity / Unit / Ingredient table with 5 blank rows for a new meal (existing rows + 2 when editing), "+ Add ingredient" and ✕ remove buttons (small inline vanilla JS; empty rows are ignored), and a `<datalist>` of unit suggestions that still allows free text.
+- [x] G.5 Validation: at least one ingredient; every filled row needs a name; the quantity must be empty or a number/fraction. Errors name the row, and the form keeps what was typed.
+- [x] G.6 A unit outside the conversion table (can, clove, bunch…) becomes part of the item name for scaling and merging (`2 can tomatoes` → item "can tomatoes", count).
+
+## 4b. Phase H — Desktop application (owner request, 2026-10-08)
+The owner no longer wants to use the app as a website in a browser. They chose a real app window (pywebview + PyInstaller) over a shortcut or a native rewrite. An **iPhone app is a later wish**; nothing here carries over to it, so it will be its own project.
+- [x] H.1 `desktop.py` starts Flask on `127.0.0.1` on a free port in a background thread and shows it in a pywebview window titled "Event Shopping List". Closing the window stops the app.
+- [x] H.2 Data folder: run from source, the app still uses `instance/` and `static/uploads/`. The built `.exe` uses `%LOCALAPPDATA%\MealKeeper` (`meals.db`, `uploads/`, backups), because a one-file `.exe` unpacks into a temporary folder. `MEAL_KEEPER_DATA` overrides the folder (handy for testing against a copy).
+- [x] H.3 Photos are served by a `/photos/<filename>` route from `UPLOAD_FOLDER`, not from `static/`.
+- [x] H.4 `prepare_database()` runs at startup of the desktop app: it creates the database if there is none, or runs the same upgrade as `migrate` (backup first). It never runs `schema.sql` over an existing database.
+- [x] H.5 Build command is in `README.md`; `build/`, `dist/` and `*.spec` are git-ignored. `static/` is deliberately not bundled, so the owner's photos never end up inside the `.exe`.
+- [ ] H.6 Owner to check by eye in the window: delete confirmations, **Print / Save as PDF**, and saving the CSV.
+- Name: the owner renamed the app from "Meal Keeper" to **"Event Shopping List"** on 2026-10-08 (the `.exe`, window title and README). The data folder is still `%LOCALAPPDATA%\MealKeeper` on purpose: renaming it would make the saved meals seem to vanish.
+- Known limit: Pico.css still comes from the CDN, so the app looks unstyled offline. Bundling it locally is not done (owner not asked yet).
 
 ## 5. Out of scope unless the owner asks
 User accounts or login, hosting or deployment (all in `future_plans.md`), a REST API, JS frameworks, ORMs, extra pip packages, a meal calendar, pricing or cost estimates, inventory tracking, a waste/extra-% buffer (owner declined), and US↔metric or weight↔volume conversion.

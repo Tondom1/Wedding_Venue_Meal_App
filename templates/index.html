@@ -11,7 +11,7 @@
         <article>
           <a href="{{ url_for('meal_detail', meal_id=meal.id) }}">
             {% if meal.photo_filename %}
-              <img class="thumb" src="{{ url_for('static', filename='uploads/' ~ meal.photo_filename) }}" alt="{{ meal.name }}">
+              <img class="thumb" src="{{ url_for('photo', filename=meal.photo_filename) }}" alt="{{ meal.name }}">
             {% endif %}
             <strong>{{ meal.name }}</strong>
           </a>

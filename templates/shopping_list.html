@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% from "_macros.html" import amount %}
+{% block title %}Shopping list – {{ event.name }}{% endblock %}
+{% block content %}
+  <p class="no-print"><a href="{{ url_for('event_detail', event_id=event.id) }}">← Back to event</a></p>
+  <h1>Shopping list</h1>
+  <p>
+    <strong>{{ event.name }}</strong>{% if event.event_date %} · {{ event.event_date }}{% endif %} · {{ event.guests }} guests<br>
+    <small>
+      {% for m in meals %}{{ m.name }} (for {{ m.headcount }}){% if not loop.last %}, {% endif %}{% endfor %}
+    </small>
+  </p>
+
+  {% if not meals %}
+    <p>This event has no meals yet. <a href="{{ url_for('event_detail', event_id=event.id) }}">Add some meals</a> to build the list.</p>
+  {% else %}
+    <div role="group" class="no-print">
+      <a href="{{ url_for('shopping_list_csv', event_id=event.id) }}" role="button">Download for Excel (CSV)</a>
+      <a href="#" role="button" class="secondary" onclick="window.print(); return false;">Print / Save as PDF</a>
+    </div>
+    <p><small>Amounts are rounded up for buying; exact amounts are in brackets.
+      Ingredients only combine when they're spelled the same way in every meal.</small></p>
+
+    {% if rows %}
+      <table>
+        <thead><tr><th>Item</th><th>Amount</th><th>Used in</th></tr></thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td>{{ row.item }}</td>
+              <td>{{ amount(row) }}</td>
+              <td><small class="used-in">{{ row.used_in | join(", ") }}</small></td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+
+    {% if not_scaled %}
+      <h2>Also needed (amounts not scaled)</h2>
+      <p><small>These lines don't start with an amount, so check how much you need.</small></p>
+      <ul>
+        {% for row in not_scaled %}
+          <li>{{ row.text }} <small class="used-in">— {{ row.used_in | join(", ") }}</small></li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+  {% endif %}
+{% endblock %}

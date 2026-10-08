@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+  <h1>{{ title }}</h1>
+  <form method="post">
+    <label>
+      Event name
+      <input type="text" name="name" value="{{ form.name or '' }}" placeholder="e.g. Smith–Jones Wedding" required>
+    </label>
+    <div class="grid">
+      <label>
+        Date (optional)
+        <input type="date" name="event_date" value="{{ form.event_date or '' }}">
+      </label>
+      <label>
+        Number of guests
+        <input type="number" name="guests" min="1" step="1" value="{{ form.guests or '' }}" required>
+      </label>
+    </div>
+    <label>
+      Notes (optional)
+      <textarea name="notes" rows="3">{{ form.notes or '' }}</textarea>
+    </label>
+    <button type="submit">Save</button>
+  </form>
+  {% if event %}
+    <p><a href="{{ url_for('event_detail', event_id=event.id) }}">Cancel</a></p>
+  {% endif %}
+{% endblock %}

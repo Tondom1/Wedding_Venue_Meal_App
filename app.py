@@ -1,24 +1,46 @@
+import csv
+import io
 import os
+import re
+import shutil
 import sqlite3
+import sys
 import uuid
+from datetime import datetime
+from fractions import Fraction
+from itertools import zip_longest
 
 from flask import (
     Flask,
+    Response,
     abort,
     flash,
     g,
     redirect,
     render_template,
     request,
+    send_from_directory,
     url_for,
 )
 from werkzeug.utils import secure_filename
 
-app = Flask(__name__, instance_relative_config=True)
+import scaling
+
+# Where meals.db and the photos live. Run from this folder, that is instance/ and
+# static/uploads/ as always. The built desktop app (Event Shopping List.exe) unpacks itself into a
+# temporary folder each time it starts, so it keeps its data in a permanent folder instead.
+DATA_DIR = os.environ.get("MEAL_KEEPER_DATA")
+if not DATA_DIR and getattr(sys, "frozen", False):
+    DATA_DIR = os.path.join(os.environ.get("LOCALAPPDATA") or os.path.expanduser("~"), "MealKeeper")
+if DATA_DIR:
+    DATA_DIR = os.path.abspath(DATA_DIR)
+
+app = Flask(__name__, instance_path=DATA_DIR, instance_relative_config=True)
 app.config.update(
     SECRET_KEY=os.environ.get("SECRET_KEY", "dev-change-me"),
     DATABASE=os.path.join(app.instance_path, "meals.db"),
-    UPLOAD_FOLDER=os.path.join(app.root_path, "static", "uploads"),
+    UPLOAD_FOLDER=(os.path.join(DATA_DIR, "uploads") if DATA_DIR
+                   else os.path.join(app.root_path, "static", "uploads")),
     MAX_CONTENT_LENGTH=5 * 1024 * 1024,
 )
 os.makedirs(app.instance_path, exist_ok=True)
@@ -33,6 +55,7 @@ def get_db():
     if "db" not in g:
         g.db = sqlite3.connect(app.config["DATABASE"])
         g.db.row_factory = sqlite3.Row
+        g.db.execute("PRAGMA foreign_keys = ON")
     return g.db
 
 
@@ -53,6 +76,144 @@ def init_db():
 def init_db_command():
     init_db()
     print("Initialized the database.")
+
+
+# ---------- Migration (upgrade an existing database without losing data) ----------
+
+EVENT_TABLES_SQL = """
+CREATE TABLE IF NOT EXISTS events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    event_date TEXT,
+    guests INTEGER NOT NULL CHECK (guests >= 1),
+    notes TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS event_meals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    meal_id INTEGER NOT NULL REFERENCES meals(id) ON DELETE CASCADE,
+    guests INTEGER CHECK (guests IS NULL OR guests >= 1),
+    UNIQUE (event_id, meal_id)
+);
+CREATE TABLE IF NOT EXISTS meal_ingredients (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    meal_id INTEGER NOT NULL REFERENCES meals(id) ON DELETE CASCADE,
+    position INTEGER NOT NULL,
+    quantity TEXT NOT NULL DEFAULT '',
+    unit TEXT NOT NULL DEFAULT '',
+    name TEXT NOT NULL
+);
+"""
+
+
+def table_exists(db, name):
+    row = db.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", (name,)
+    ).fetchone()
+    return row is not None
+
+
+def meal_columns(db):
+    return {row["name"] for row in db.execute("PRAGMA table_info(meals)")}
+
+
+def needs_migration(db):
+    if not table_exists(db, "meals"):
+        return False
+    return (
+        "servings" not in meal_columns(db)
+        or not table_exists(db, "events")
+        or not table_exists(db, "event_meals")
+        or not table_exists(db, "meal_ingredients")
+        or meals_without_ingredient_rows(db)
+    )
+
+
+def meals_without_ingredient_rows(db):
+    return db.execute(
+        "SELECT id, ingredients FROM meals m WHERE NOT EXISTS "
+        "(SELECT 1 FROM meal_ingredients i WHERE i.meal_id = m.id)"
+    ).fetchall()
+
+
+def backup_database():
+    src = app.config["DATABASE"]
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    dest = os.path.join(app.instance_path, f"meals-backup-{stamp}.db")
+    shutil.copy2(src, dest)
+    return dest
+
+
+@app.cli.command("migrate")
+def migrate_command():
+    """Safely upgrade an existing database. Never deletes data; safe to run more than once."""
+    if not os.path.exists(app.config["DATABASE"]):
+        print("No database found. For a brand-new install run: flask --app app init-db")
+        return
+    db = get_db()
+    if not table_exists(db, "meals"):
+        print("The database has no meals table. For a brand-new install run: flask --app app init-db")
+        return
+    if not needs_migration(db):
+        print("Database is already up to date. Nothing to do.")
+        return
+    for message in upgrade_database(db):
+        print(message)
+
+
+def upgrade_database(db):
+    """Back up, then bring an older database up to date. Returns what was done, as messages."""
+    messages = [f"Backup saved to {backup_database()}"]
+    if "servings" not in meal_columns(db):
+        db.execute("ALTER TABLE meals ADD COLUMN servings INTEGER NOT NULL DEFAULT 1")
+        messages.append("Added 'servings' to meals (existing meals set to 1 - please edit each meal to set the real number).")
+    db.executescript(EVENT_TABLES_SQL)
+    count = convert_ingredient_text_to_rows(db)
+    if count:
+        messages.append(f"Moved the ingredients of {count} meal(s) into the new ingredient table.")
+    db.commit()
+    messages.append("Database upgraded.")
+    return messages
+
+
+def prepare_database():
+    """For the desktop app, which has no command line: create the database the first time,
+    or upgrade an older one (a backup is saved first). Existing meals are never erased."""
+    path = app.config["DATABASE"]
+    with app.app_context():
+        if not os.path.exists(path) or os.path.getsize(path) == 0:
+            init_db()
+        elif needs_migration(get_db()):
+            upgrade_database(get_db())
+
+
+def convert_ingredient_text_to_rows(db):
+    """One-time: split each meal's old one-per-line ingredients into table rows.
+    The original text column is left untouched."""
+    meals = meals_without_ingredient_rows(db)
+    for meal in meals:
+        for position, line in enumerate(lines_filter(meal["ingredients"])):
+            quantity, unit, name = scaling.split_line(line)
+            if not name:  # e.g. a line that was only "2 cups": keep it whole so nothing is lost
+                quantity, unit, name = "", "", line
+            db.execute(
+                "INSERT INTO meal_ingredients (meal_id, position, quantity, unit, name) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (meal["id"], position, quantity, unit, name),
+            )
+    return len(meals)
+
+
+@app.before_request
+def check_database_upgraded():
+    if request.endpoint == "static" or app.config.get("DB_CHECKED"):
+        return None
+    if os.path.exists(app.config["DATABASE"]) and needs_migration(get_db()):
+        return render_template("needs_migration.html"), 503
+    app.config["DB_CHECKED"] = True
+    return None
 
 
 def get_meal_or_404(meal_id):
@@ -84,14 +245,97 @@ def delete_photo(filename):
         os.remove(path)
 
 
+@app.route("/photos/<filename>")
+def photo(filename):
+    return send_from_directory(app.config["UPLOAD_FOLDER"], filename)
+
+
 # ---------- Helpers ----------
 
 def read_form():
-    return {
+    form = {
         "name": request.form.get("name", "").strip(),
-        "ingredients": request.form.get("ingredients", "").strip(),
         "recipe": request.form.get("recipe", "").strip(),
+        "servings": request.form.get("servings", "").strip(),
+        "rows": read_ingredient_rows(),
     }
+    form["ingredients"] = ingredients_text(form["rows"])
+    return form
+
+
+def read_ingredient_rows():
+    """The filled-in rows of the ingredient table (completely empty rows are skipped)."""
+    rows = []
+    for quantity, unit, name in zip_longest(
+        request.form.getlist("ing_qty"), request.form.getlist("ing_unit"),
+        request.form.getlist("ing_name"), fillvalue="",
+    ):
+        quantity, unit, name = quantity.strip(), unit.strip(), name.strip()
+        if quantity or unit or name:
+            rows.append({"quantity": quantity, "unit": unit, "name": name})
+    return rows
+
+
+def ingredients_text(rows):
+    """Plain-text copy of the ingredients (one per line), kept for search."""
+    return "\n".join(" ".join(p for p in (r["quantity"], r["unit"], r["name"]) if p) for r in rows)
+
+
+def parse_servings(text):
+    """Return a whole number >= 1, or None if the text isn't one."""
+    try:
+        value = int(text)
+    except (TypeError, ValueError):
+        return None
+    return value if value >= 1 else None
+
+
+def validate_form(form):
+    """Return an error message, or None if the form is fine."""
+    if not form["name"]:
+        return "Meal name is required."
+    if parse_servings(form["servings"]) is None:
+        return "Serves must be a whole number of 1 or more."
+    if not form["rows"]:
+        return "Add at least one ingredient."
+    for number, row in enumerate(form["rows"], start=1):
+        if not row["name"]:
+            return f"Ingredient row {number}: please type the ingredient name."
+        try:
+            scaling.parse_quantity(row["quantity"])
+        except ValueError:
+            return (f"Ingredient row {number} ({row['name']}): \"{row['quantity']}\" isn't a quantity. "
+                    "Use a number like 2, 1.5, 1/2 or 1 1/2, or leave it empty.")
+    return None
+
+
+def save_ingredient_rows(db, meal_id, rows):
+    db.execute("DELETE FROM meal_ingredients WHERE meal_id = ?", (meal_id,))
+    for position, row in enumerate(rows):
+        db.execute(
+            "INSERT INTO meal_ingredients (meal_id, position, quantity, unit, name) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (meal_id, position, row["quantity"], row["unit"], row["name"]),
+        )
+
+
+def load_ingredient_rows(meal_id):
+    rows = get_db().execute(
+        "SELECT quantity, unit, name FROM meal_ingredients WHERE meal_id = ? ORDER BY position, id",
+        (meal_id,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def ingredient_lines(rows):
+    """Turn saved rows into scaling Lines (a bad quantity is shown unscaled rather than crashing)."""
+    lines = []
+    for r in rows:
+        try:
+            lines.append(scaling.line_from_parts(r["quantity"], r["unit"], r["name"]))
+        except ValueError:
+            lines.append(scaling.line_from_parts("", "", ingredients_text([r])))
+    return lines
 
 
 @app.template_filter("lines")
@@ -122,11 +366,12 @@ def index():
 @app.route("/meals/new", methods=["GET", "POST"])
 def new_meal():
     if request.method == "GET":
-        return render_template("meal_form.html", meal=None, form={}, title="Add Meal")
+        return render_template("meal_form.html", meal=None, form={"rows": []}, title="Add Meal")
 
     form = read_form()
-    if not form["name"] or not form["ingredients"]:
-        flash("Name and ingredients are required.", "error")
+    error = validate_form(form)
+    if error:
+        flash(error, "error")
         return render_template("meal_form.html", meal=None, form=form, title="Add Meal")
 
     try:
@@ -138,9 +383,12 @@ def new_meal():
     db = get_db()
     try:
         cur = db.execute(
-            "INSERT INTO meals (name, ingredients, recipe, photo_filename) VALUES (?, ?, ?, ?)",
-            (form["name"], form["ingredients"], form["recipe"], photo),
+            "INSERT INTO meals (name, ingredients, recipe, photo_filename, servings) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (form["name"], form["ingredients"], form["recipe"], photo,
+             parse_servings(form["servings"])),
         )
+        save_ingredient_rows(db, cur.lastrowid, form["rows"])
         db.commit()
     except sqlite3.IntegrityError:
         delete_photo(photo)
@@ -153,18 +401,39 @@ def new_meal():
 
 @app.route("/meals/<int:meal_id>")
 def meal_detail(meal_id):
-    return render_template("meal_detail.html", meal=get_meal_or_404(meal_id))
+    meal = get_meal_or_404(meal_id)
+    ingredient_rows = load_ingredient_rows(meal_id)
+    guests_text = request.args.get("guests", "").strip()
+    guests = rows = factor_text = guests_error = None
+    if guests_text:
+        guests = parse_servings(guests_text)
+        if guests is None:
+            guests_error = "Number of guests must be a whole number of 1 or more."
+        else:
+            factor = Fraction(guests, meal["servings"])
+            rows = scaling.scaled_rows(ingredient_lines(ingredient_rows), factor)
+            factor_text = scaling.format_exact(factor)
+    event_count = get_db().execute(
+        "SELECT COUNT(*) FROM event_meals WHERE meal_id = ?", (meal_id,)
+    ).fetchone()[0]
+    return render_template(
+        "meal_detail.html", meal=meal, ingredient_rows=ingredient_rows, guests_text=guests_text, guests=guests,
+        rows=rows, factor_text=factor_text, guests_error=guests_error, event_count=event_count,
+    )
 
 
 @app.route("/meals/<int:meal_id>/edit", methods=["GET", "POST"])
 def edit_meal(meal_id):
     meal = get_meal_or_404(meal_id)
     if request.method == "GET":
-        return render_template("meal_form.html", meal=meal, form=dict(meal), title="Edit Meal")
+        form = dict(meal)
+        form["rows"] = load_ingredient_rows(meal_id)
+        return render_template("meal_form.html", meal=meal, form=form, title="Edit Meal")
 
     form = read_form()
-    if not form["name"] or not form["ingredients"]:
-        flash("Name and ingredients are required.", "error")
+    error = validate_form(form)
+    if error:
+        flash(error, "error")
         return render_template("meal_form.html", meal=meal, form=form, title="Edit Meal")
 
     try:
@@ -185,9 +454,11 @@ def edit_meal(meal_id):
     try:
         db.execute(
             "UPDATE meals SET name = ?, ingredients = ?, recipe = ?, photo_filename = ?, "
-            "updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-            (form["name"], form["ingredients"], form["recipe"], photo, meal_id),
+            "servings = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (form["name"], form["ingredients"], form["recipe"], photo,
+             parse_servings(form["servings"]), meal_id),
         )
+        save_ingredient_rows(db, meal_id, form["rows"])
         db.commit()
     except sqlite3.IntegrityError:
         delete_photo(new_photo)
@@ -210,6 +481,212 @@ def delete_meal(meal_id):
     delete_photo(meal["photo_filename"])
     flash("Meal deleted.", "success")
     return redirect(url_for("index"))
+
+
+# ---------- Events ----------
+
+def get_event_or_404(event_id):
+    event = get_db().execute("SELECT * FROM events WHERE id = ?", (event_id,)).fetchone()
+    if event is None:
+        abort(404)
+    return event
+
+
+def read_event_form():
+    return {
+        "name": request.form.get("name", "").strip(),
+        "event_date": request.form.get("event_date", "").strip(),
+        "guests": request.form.get("guests", "").strip(),
+        "notes": request.form.get("notes", "").strip(),
+    }
+
+
+def validate_event_form(form):
+    if not form["name"]:
+        return "Event name is required."
+    if parse_servings(form["guests"]) is None:
+        return "Number of guests must be a whole number of 1 or more."
+    if form["event_date"]:
+        try:
+            datetime.strptime(form["event_date"], "%Y-%m-%d")
+        except ValueError:
+            return "Date must look like 2026-06-20."
+    return None
+
+
+def event_meal_rows(event):
+    """The meals on an event, each with the headcount it is scaled for."""
+    rows = get_db().execute(
+        "SELECT em.id AS event_meal_id, em.guests AS own_guests, m.id AS meal_id, m.name, "
+        "m.servings, m.ingredients FROM event_meals em JOIN meals m ON m.id = em.meal_id "
+        "WHERE em.event_id = ? ORDER BY m.name",
+        (event["id"],),
+    ).fetchall()
+    result = []
+    for r in rows:
+        item = dict(r)
+        item["headcount"] = r["own_guests"] or event["guests"]
+        item["lines"] = ingredient_lines(load_ingredient_rows(r["meal_id"]))
+        result.append(item)
+    return result
+
+
+def build_shopping_list(event):
+    meals = event_meal_rows(event)
+    rows, not_scaled = scaling.combined_list(
+        (m["name"], m["lines"], Fraction(m["headcount"], m["servings"])) for m in meals
+    )
+    return meals, rows, not_scaled
+
+
+@app.route("/events")
+def events_list():
+    events = get_db().execute(
+        "SELECT e.*, (SELECT COUNT(*) FROM event_meals em WHERE em.event_id = e.id) AS meal_count "
+        "FROM events e ORDER BY e.event_date IS NULL, e.event_date DESC, e.created_at DESC"
+    ).fetchall()
+    return render_template("events.html", events=events)
+
+
+@app.route("/events/new", methods=["GET", "POST"])
+def new_event():
+    if request.method == "GET":
+        return render_template("event_form.html", form={}, title="New Event")
+    form = read_event_form()
+    error = validate_event_form(form)
+    if error:
+        flash(error, "error")
+        return render_template("event_form.html", form=form, title="New Event")
+    db = get_db()
+    cur = db.execute(
+        "INSERT INTO events (name, event_date, guests, notes) VALUES (?, ?, ?, ?)",
+        (form["name"], form["event_date"] or None, parse_servings(form["guests"]), form["notes"]),
+    )
+    db.commit()
+    flash("Event saved. Now add the meals being served.", "success")
+    return redirect(url_for("event_detail", event_id=cur.lastrowid))
+
+
+@app.route("/events/<int:event_id>")
+def event_detail(event_id):
+    event = get_event_or_404(event_id)
+    meals = event_meal_rows(event)
+    used = {m["meal_id"] for m in meals}
+    all_meals = get_db().execute("SELECT id, name FROM meals ORDER BY name").fetchall()
+    available = [m for m in all_meals if m["id"] not in used]
+    return render_template("event_detail.html", event=event, meals=meals, available=available)
+
+
+@app.route("/events/<int:event_id>/edit", methods=["GET", "POST"])
+def edit_event(event_id):
+    event = get_event_or_404(event_id)
+    if request.method == "GET":
+        form = dict(event)
+        form["event_date"] = form["event_date"] or ""
+        return render_template("event_form.html", form=form, title="Edit Event", event=event)
+    form = read_event_form()
+    error = validate_event_form(form)
+    if error:
+        flash(error, "error")
+        return render_template("event_form.html", form=form, title="Edit Event", event=event)
+    db = get_db()
+    db.execute(
+        "UPDATE events SET name = ?, event_date = ?, guests = ?, notes = ?, "
+        "updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        (form["name"], form["event_date"] or None, parse_servings(form["guests"]), form["notes"], event_id),
+    )
+    db.commit()
+    flash("Event updated.", "success")
+    return redirect(url_for("event_detail", event_id=event_id))
+
+
+@app.route("/events/<int:event_id>/delete", methods=["POST"])
+def delete_event(event_id):
+    get_event_or_404(event_id)
+    db = get_db()
+    db.execute("DELETE FROM events WHERE id = ?", (event_id,))
+    db.commit()
+    flash("Event deleted. Your meals were not changed.", "success")
+    return redirect(url_for("events_list"))
+
+
+@app.route("/events/<int:event_id>/meals", methods=["POST"])
+def add_event_meal(event_id):
+    get_event_or_404(event_id)
+    meal_id = parse_servings(request.form.get("meal_id", ""))
+    if meal_id is None:
+        flash("Choose a meal to add.", "error")
+        return redirect(url_for("event_detail", event_id=event_id))
+    get_meal_or_404(meal_id)
+    guests_text = request.form.get("guests", "").strip()
+    guests = None
+    if guests_text:
+        guests = parse_servings(guests_text)
+        if guests is None:
+            flash("Headcount must be a whole number of 1 or more (or leave it empty).", "error")
+            return redirect(url_for("event_detail", event_id=event_id))
+    db = get_db()
+    try:
+        db.execute(
+            "INSERT INTO event_meals (event_id, meal_id, guests) VALUES (?, ?, ?)",
+            (event_id, meal_id, guests),
+        )
+        db.commit()
+    except sqlite3.IntegrityError:
+        flash("That meal is already on this event.", "error")
+        return redirect(url_for("event_detail", event_id=event_id))
+    flash("Meal added.", "success")
+    return redirect(url_for("event_detail", event_id=event_id))
+
+
+@app.route("/events/<int:event_id>/meals/<int:event_meal_id>/delete", methods=["POST"])
+def remove_event_meal(event_id, event_meal_id):
+    db = get_db()
+    cur = db.execute(
+        "DELETE FROM event_meals WHERE id = ? AND event_id = ?", (event_meal_id, event_id)
+    )
+    db.commit()
+    if cur.rowcount == 0:
+        abort(404)
+    flash("Meal removed from the event.", "success")
+    return redirect(url_for("event_detail", event_id=event_id))
+
+
+@app.route("/events/<int:event_id>/shopping-list")
+def shopping_list(event_id):
+    event = get_event_or_404(event_id)
+    meals, rows, not_scaled = build_shopping_list(event)
+    return render_template(
+        "shopping_list.html", event=event, meals=meals, rows=rows, not_scaled=not_scaled
+    )
+
+
+def csv_number(value):
+    return scaling.format_exact(value)
+
+
+@app.route("/events/<int:event_id>/shopping-list.csv")
+def shopping_list_csv(event_id):
+    event = get_event_or_404(event_id)
+    _, rows, not_scaled = build_shopping_list(event)
+    out = io.StringIO()
+    out.write("﻿")  # BOM so Excel reads the file as UTF-8
+    writer = csv.writer(out)
+    writer.writerow(["Item", "Amount", "Unit", "Exact amount", "Original unit", "Used in"])
+    for row in rows:
+        a = row.amount
+        writer.writerow([
+            row.item, csv_number(a.rounded), scaling.unit_label(a.unit, a.rounded),
+            csv_number(a.exact), scaling.unit_label(a.exact_unit, a.exact), ", ".join(row.used_in),
+        ])
+    for row in not_scaled:
+        writer.writerow([row.text, "", "not scaled", "", "", ", ".join(row.used_in)])
+    slug = re.sub(r"[^A-Za-z0-9]+", "-", event["name"]).strip("-").lower() or "event"
+    return Response(
+        out.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{slug}-shopping-list.csv"'},
+    )
 
 
 # ---------- Errors ----------

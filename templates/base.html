@@ -12,19 +12,34 @@
     .recipe { white-space: pre-wrap; }
     .flash-error { color: var(--pico-del-color); }
     .flash-success { color: var(--pico-ins-color); }
+    .exact, .used-in { color: var(--pico-muted-color); }
+    table.ingredients { margin-bottom: 0.5rem; }
+    table.ingredients td { padding: 0.25rem; vertical-align: middle; }
+    table.ingredients input { margin: 0; }
+    table.ingredients .col-qty { width: 7.5rem; }
+    table.ingredients .col-unit { width: 8.5rem; }
+    table.ingredients .col-del { width: 3rem; }
+    table.ingredients .remove-ingredient { margin: 0; padding: 0.4rem 0.6rem; }
+    .not-scaled { color: var(--pico-muted-color); font-style: italic; }
+    @media print {
+      nav, .no-print, form, button, [role="button"] { display: none !important; }
+      main.container { max-width: none; padding: 0; }
+      table { font-size: 11pt; }
+    }
   </style>
 </head>
 <body>
   <main class="container">
-    <nav>
+    <nav class="no-print">
       <ul><li><strong>Meals</strong></li></ul>
       <ul>
         <li><a href="{{ url_for('index') }}">Meals</a></li>
         <li><a href="{{ url_for('new_meal') }}">Add Meal</a></li>
+        <li><a href="{{ url_for('events_list') }}">Events</a></li>
       </ul>
     </nav>
     {% for category, message in get_flashed_messages(with_categories=true) %}
-      <article class="flash-{{ category }}">{{ message }}</article>
+      <article class="flash-{{ category }} no-print">{{ message }}</article>
     {% endfor %}
     {% block content %}{% endblock %}
   </main>
