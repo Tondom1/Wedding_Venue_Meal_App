@@ -13,7 +13,7 @@ Read this file at the start of every session in this folder. It records what the
 
 ## 2. Current state (as of 2026-10-08)
 
-Phases A–G of section 4 (scaling, guests box, events, combined shopping list, CSV/print, ingredient table) and Phase H (desktop application, section 4b) are **built and pushed to `dev`**. Nothing is released to `main` yet.
+Phases A–G of section 4 (scaling, guests box, events, combined shopping list, CSV/print, ingredient table) and Phase H (desktop application, section 4b) are **built and released**. Release **`v00.01.00`** (2026-10-08) is on `main`, with `Event Shopping List.exe` attached to its GitHub release page. Releases are tagged `vNN.NN.NN`; the repository is private.
 
 
 Everything in `PLAN.md` (Phases 1–6) **is built and working** in `app.py`, `schema.sql` and `templates/`:
