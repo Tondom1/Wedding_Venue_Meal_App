@@ -37,11 +37,11 @@ Housekeeping notes:
 **Platform:** Windows. Give commands in **PowerShell** form, e.g. `.\.venv\Scripts\python -m flask --app app run`.
 
 **Git / GitHub (owner's rule):** the repo is `Tondom1/Wedding_Venue_Meal_App`.
-- The owner's folder `C:\Claude Projects\Wedding_Venue_Meal_App` is the **working copy, checked out on `dev`**. Make every code change **directly in that folder** (through the computer link), so the owner can run and look at it before anything goes online.
+- The owner's folder `C:\Claude Projects\Wedding_Venue_Meal_App` is the **working copy, checked out on `dev`**. Make every code change **directly in that folder**, so the owner can run and look at it before anything goes online.
 - Local commits on `dev` are fine. **Do not push anything to GitHub until the owner says it looks good.**
 - **Never commit, merge or push to `main` unless the owner says a release is ready.** `main` holds releases only.
 - `v1-checkpoint` is a frozen copy of the original working app. Never change it.
-- How to push when approved: the computer has no GitHub login, so make a bundle on the computer (`git bundle create x.bundle dev`), stage it into the cloud workspace, fetch it into a clone there, and push from the clone. Then delete the bundle file from the owner's folder.
+- How to push when approved: when running in **Claude Code on the owner's computer**, just `git push origin dev` (the owner's own Git login is used). Only if working from a cloud session linked to the computer, which has no GitHub login there: make a bundle on the computer (`git bundle create x.bundle origin/dev..dev`), stage it into the cloud workspace, fetch it into a clone there, push from the clone, then delete the bundle file from the owner's folder.
 - Line endings: the repo stores LF, and the owner's Windows Git converts on checkout. A file that differs only by CRLF isn't a real change (`git diff --ignore-cr-at-eol`).
 
 **Way of working:**
