@@ -9,8 +9,14 @@
     </label>
 
     <label>
+      Serves (number of people)
+      <input type="number" name="servings" min="1" step="1" value="{{ form.servings or '' }}" required>
+      <small>How many people the ingredient amounts below feed.</small>
+    </label>
+
+    <label>
       Ingredients
-      <textarea name="ingredients" rows="8" placeholder="One ingredient per line" required>{{ form.ingredients or '' }}</textarea>
+      <textarea name="ingredients" rows="8" placeholder="One per line, amount first — e.g. 2 lb chicken thighs" required>{{ form.ingredients or '' }}</textarea>
     </label>
 
     <label>

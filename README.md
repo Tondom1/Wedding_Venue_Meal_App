@@ -53,6 +53,26 @@ You should see `Initialized the database.`
 
 ---
 
+## Upgrading from an older version (one time)
+
+If you already have saved meals from an earlier version, the app will show an **"upgrade needed"** page. Stop the app (**Ctrl + C**) and run this once in the app folder:
+
+**Windows:**
+```powershell
+.\.venv\Scripts\python -m flask --app app migrate
+```
+
+**Mac / Linux:**
+```bash
+.venv/bin/python -m flask --app app migrate
+```
+
+This **keeps all your meals**. It saves a backup copy first, named `instance/meals-backup-<date>.db`. It's safe to run more than once.
+
+After upgrading, every existing meal is set to **"Serves 1"**. Open each meal, click **Edit** and enter how many people it really serves.
+
+---
+
 ## 3. Start the app (every time you want to use it)
 
 In a terminal inside the `meal-app` folder:
@@ -75,7 +95,7 @@ When you're finished, go back to the terminal and press **Ctrl + C** to stop the
 
 ## How to use it
 
-- **Add a meal:** click **Add Meal**. Type the name, list the ingredients (**one per line**), add the recipe, and optionally choose a photo. Then click **Save**.
+- **Add a meal:** click **Add Meal**. Type the name, enter how many people the recipe **serves**, list the ingredients (**one per line, amount first**, for example `2 lb chicken thighs`), add the recipe, and optionally choose a photo. Then click **Save**.
 - **Find a meal:** use the search box on the home page. You can search by meal name or by an ingredient (for example `chicken`).
 - **See what to buy:** click a meal to see its ingredient list and recipe.
 - **Change a meal:** open the meal and click **Edit**. You can also replace or remove its photo there.

@@ -33,6 +33,11 @@ Housekeeping notes:
 
 **Platform:** Windows. Give commands in **PowerShell** form, e.g. `.\.venv\Scripts\python -m flask --app app run`.
 
+**Git / GitHub (owner's rule):** the repo is `Tondom1/Wedding_Venue_Meal_App`.
+- Do all work on the **`dev`** branch (or short-lived branches merged into `dev`). Commit and push to `dev` freely.
+- **Never commit, merge or push to `main` unless the owner says a release is ready.** `main` holds releases only.
+- `v1-checkpoint` is a frozen copy of the original working app. Never change it.
+
 **Way of working:**
 - Keep it simple and don't add features the owner didn't ask for.
 - Work in small phases. After each phase, list the manual "Check" steps and confirm they pass.
@@ -92,9 +97,9 @@ Keep `ingredients` as plain text, one per line. A line is `<amount> [unit] <item
 Put the parsing, scaling, conversion, rounding and formatting into **one small module of pure functions** (e.g. `scaling.py`), shared by the meal page and the event list. Cover it with a `test_scaling.py` that uses only the built-in `unittest`.
 
 ### Phase A — Servings + safe migration
-- [ ] A.1 Add `servings INTEGER NOT NULL DEFAULT 1` to `meals`. Do it in `schema.sql` for fresh installs, and through an idempotent `flask --app app migrate` command for existing databases (`PRAGMA table_info` check, then `ALTER TABLE ... ADD COLUMN`). The same command creates the event tables from Phase D with `CREATE TABLE IF NOT EXISTS`.
-- [ ] A.2 Meal form: add a required "Serves (number of people)" field (`min="1"`, `step="1"`) and validate it on the server. Change the ingredients placeholder to `One per line, amount first — e.g. 2 lb chicken thighs`.
-- [ ] A.3 If a meal's servings is still 1, show a gentle note on its page reminding the owner to check the servings number.
+- [x] A.1 (Done: `migrate` also saves an automatic backup `instance/meals-backup-<date>.db` before changing anything, and the app shows a friendly "upgrade needed" page until it's run.) Add `servings INTEGER NOT NULL DEFAULT 1` to `meals`. Do it in `schema.sql` for fresh installs, and through an idempotent `flask --app app migrate` command for existing databases (`PRAGMA table_info` check, then `ALTER TABLE ... ADD COLUMN`). The same command creates the event tables from Phase D with `CREATE TABLE IF NOT EXISTS`.
+- [x] A.2 Meal form: add a required "Serves (number of people)" field (`min="1"`, `step="1"`) and validate it on the server. Change the ingredients placeholder to `One per line, amount first — e.g. 2 lb chicken thighs`.
+- [x] A.3 If a meal's servings is still 1, show a gentle note on its page reminding the owner to check the servings number.
 
 ### Phase B — Scaling module
 - [ ] B.1 Build `scaling.py`: `parse_line`, `scale`, `to_convenient_unit`, `round_up_for_purchase`, `format_amount`. Return structured results (amount, unit, item, scaled flag) so the event list can sum them.

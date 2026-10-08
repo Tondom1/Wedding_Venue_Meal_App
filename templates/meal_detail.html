@@ -6,6 +6,12 @@
   {% endif %}
 
   <h1>{{ meal.name }}</h1>
+  <p>Serves {{ meal.servings }} {{ "person" if meal.servings == 1 else "people" }}</p>
+  {% if meal.servings == 1 %}
+    <p><small>Is "serves 1" right for this meal? If the ingredient amounts feed more people,
+      <a href="{{ url_for('edit_meal', meal_id=meal.id) }}">edit the meal</a> and set the real number,
+      so guest counts scale correctly.</small></p>
+  {% endif %}
 
   <h2>Ingredients</h2>
   <ul>
