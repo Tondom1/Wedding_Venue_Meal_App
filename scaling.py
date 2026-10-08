@@ -124,13 +124,64 @@ def parse_unit(text):
     return None, text
 
 
+def _normalise_fractions(text):
+    for symbol, frac in _UNICODE_FRACTIONS.items():
+        text = re.sub(r"(\d)" + symbol, r"\1 " + frac, text)  # 1½ -> 1 1/2
+        text = text.replace(symbol, frac)
+    return text
+
+
+def parse_quantity(text):
+    """Parse a Quantity box on its own: '2', '1.5', '1/2', '1 1/2', '½'.
+    Returns a Fraction, None for an empty box, or raises ValueError if it isn't a quantity."""
+    text = (text or "").strip()
+    if not text:
+        return None
+    amount, rest = parse_amount(_normalise_fractions(text))
+    if amount is None or rest:
+        raise ValueError(text)
+    return amount
+
+
+def line_from_parts(quantity, unit, name):
+    """Build a Line from the three boxes of the ingredient table.
+    A unit we don't convert (cans, cloves, bunch) becomes part of the item name.
+    An empty quantity means 'not scaled'. Raises ValueError for a bad quantity."""
+    quantity, unit, name = (quantity or "").strip(), (unit or "").strip(), (name or "").strip()
+    amount = parse_quantity(quantity)
+    canonical = None
+    if unit:
+        canonical, leftover = parse_unit(unit)
+        if canonical is None or leftover:
+            canonical = None
+    item = name if canonical else " ".join(p for p in (unit, name) if p)
+    text = " ".join(p for p in (quantity, unit, name) if p)
+    if amount is None:
+        return Line(text=text, amount=None, unit=None, item=text)
+    return Line(text=text, amount=amount, unit=canonical, item=item)
+
+
+def split_line(text):
+    """Split an old one-line ingredient into (quantity, unit, name) for the table.
+    Lines that don't start with an amount go wholly into the name."""
+    text = text.strip()
+    work = _normalise_fractions(text)
+    m = _AMOUNT_RE.match(work)
+    if not m or parse_amount(work)[0] is None:
+        return "", "", text
+    quantity = " ".join(m.group(0).split())
+    rest = work[m.end():].strip()
+    unit, name = parse_unit(rest)
+    if unit is None:
+        return quantity, "", rest
+    unit_text = rest[: len(rest) - len(name)].strip() if name else rest
+    return quantity, unit_text, name
+
+
 def parse_line(text):
     """Turn one typed ingredient line into a Line."""
     text = text.strip()
-    work = text
-    for symbol, frac in _UNICODE_FRACTIONS.items():
-        work = re.sub(r"(\d)" + symbol, r"\1 " + frac, work)  # 1½ -> 1 1/2
-        work = work.replace(symbol, frac)
+    work = _normalise_fractions(text)
     amount, rest = parse_amount(work)
     if amount is None:
         return Line(text=text, amount=None, unit=None, item=text)
@@ -280,10 +331,17 @@ class ListRow:
     used_in: List[str] = field(default_factory=list)
 
 
-def scaled_rows(ingredients_text, factor):
-    """Rows for one meal scaled by factor, in the order typed (no merging)."""
+def _as_lines(ingredients):
+    """Accept either a list of Lines or old-style text (one ingredient per line)."""
+    if isinstance(ingredients, str) or ingredients is None:
+        return parse_ingredients(ingredients)
+    return list(ingredients)
+
+
+def scaled_rows(ingredients, factor):
+    """Rows for one meal scaled by factor, in the order entered (no merging)."""
     rows = []
-    for line in parse_ingredients(ingredients_text):
+    for line in _as_lines(ingredients):
         if not line.scaled:
             rows.append(ListRow(item=line.item, amount=None, text=line.text))
             continue
@@ -300,14 +358,15 @@ def _merge_key(item):
 def combined_list(meals):
     """Merge several meals into one shopping list.
 
-    meals: iterable of (meal_name, ingredients_text, factor).
+    meals: iterable of (meal_name, ingredients, factor); ingredients is a list of Lines
+    (or old-style text).
     Same item (ignoring case and extra spaces) with the same kind of unit is added
     together before converting and rounding, so rounding happens once per item.
     Returns (rows sorted by item, not_scaled_rows in meal order)."""
     totals = {}       # (key, kind) -> dict
     not_scaled = []
-    for meal_name, ingredients_text, factor in meals:
-        for line in parse_ingredients(ingredients_text):
+    for meal_name, ingredients, factor in meals:
+        for line in _as_lines(ingredients):
             if not line.scaled:
                 not_scaled.append(ListRow(item=line.item, amount=None, text=line.text, used_in=[meal_name]))
                 continue

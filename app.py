@@ -7,6 +7,7 @@ import sqlite3
 import uuid
 from datetime import datetime
 from fractions import Fraction
+from itertools import zip_longest
 
 from flask import (
     Flask,
@@ -84,6 +85,14 @@ CREATE TABLE IF NOT EXISTS event_meals (
     guests INTEGER CHECK (guests IS NULL OR guests >= 1),
     UNIQUE (event_id, meal_id)
 );
+CREATE TABLE IF NOT EXISTS meal_ingredients (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    meal_id INTEGER NOT NULL REFERENCES meals(id) ON DELETE CASCADE,
+    position INTEGER NOT NULL,
+    quantity TEXT NOT NULL DEFAULT '',
+    unit TEXT NOT NULL DEFAULT '',
+    name TEXT NOT NULL
+);
 """
 
 
@@ -105,7 +114,16 @@ def needs_migration(db):
         "servings" not in meal_columns(db)
         or not table_exists(db, "events")
         or not table_exists(db, "event_meals")
+        or not table_exists(db, "meal_ingredients")
+        or meals_without_ingredient_rows(db)
     )
+
+
+def meals_without_ingredient_rows(db):
+    return db.execute(
+        "SELECT id, ingredients FROM meals m WHERE NOT EXISTS "
+        "(SELECT 1 FROM meal_ingredients i WHERE i.meal_id = m.id)"
+    ).fetchall()
 
 
 def backup_database():
@@ -137,8 +155,28 @@ def migrate_command():
         db.execute("ALTER TABLE meals ADD COLUMN servings INTEGER NOT NULL DEFAULT 1")
         print("Added 'servings' to meals (existing meals set to 1 - please edit each meal to set the real number).")
     db.executescript(EVENT_TABLES_SQL)
+    count = convert_ingredient_text_to_rows(db)
+    if count:
+        print(f"Moved the ingredients of {count} meal(s) into the new ingredient table.")
     db.commit()
     print("Database upgraded.")
+
+
+def convert_ingredient_text_to_rows(db):
+    """One-time: split each meal's old one-per-line ingredients into table rows.
+    The original text column is left untouched."""
+    meals = meals_without_ingredient_rows(db)
+    for meal in meals:
+        for position, line in enumerate(lines_filter(meal["ingredients"])):
+            quantity, unit, name = scaling.split_line(line)
+            if not name:  # e.g. a line that was only "2 cups": keep it whole so nothing is lost
+                quantity, unit, name = "", "", line
+            db.execute(
+                "INSERT INTO meal_ingredients (meal_id, position, quantity, unit, name) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (meal["id"], position, quantity, unit, name),
+            )
+    return len(meals)
 
 
 @app.before_request
@@ -183,12 +221,32 @@ def delete_photo(filename):
 # ---------- Helpers ----------
 
 def read_form():
-    return {
+    form = {
         "name": request.form.get("name", "").strip(),
-        "ingredients": request.form.get("ingredients", "").strip(),
         "recipe": request.form.get("recipe", "").strip(),
         "servings": request.form.get("servings", "").strip(),
+        "rows": read_ingredient_rows(),
     }
+    form["ingredients"] = ingredients_text(form["rows"])
+    return form
+
+
+def read_ingredient_rows():
+    """The filled-in rows of the ingredient table (completely empty rows are skipped)."""
+    rows = []
+    for quantity, unit, name in zip_longest(
+        request.form.getlist("ing_qty"), request.form.getlist("ing_unit"),
+        request.form.getlist("ing_name"), fillvalue="",
+    ):
+        quantity, unit, name = quantity.strip(), unit.strip(), name.strip()
+        if quantity or unit or name:
+            rows.append({"quantity": quantity, "unit": unit, "name": name})
+    return rows
+
+
+def ingredients_text(rows):
+    """Plain-text copy of the ingredients (one per line), kept for search."""
+    return "\n".join(" ".join(p for p in (r["quantity"], r["unit"], r["name"]) if p) for r in rows)
 
 
 def parse_servings(text):
@@ -202,11 +260,50 @@ def parse_servings(text):
 
 def validate_form(form):
     """Return an error message, or None if the form is fine."""
-    if not form["name"] or not form["ingredients"]:
-        return "Name and ingredients are required."
+    if not form["name"]:
+        return "Meal name is required."
     if parse_servings(form["servings"]) is None:
         return "Serves must be a whole number of 1 or more."
+    if not form["rows"]:
+        return "Add at least one ingredient."
+    for number, row in enumerate(form["rows"], start=1):
+        if not row["name"]:
+            return f"Ingredient row {number}: please type the ingredient name."
+        try:
+            scaling.parse_quantity(row["quantity"])
+        except ValueError:
+            return (f"Ingredient row {number} ({row['name']}): \"{row['quantity']}\" isn't a quantity. "
+                    "Use a number like 2, 1.5, 1/2 or 1 1/2, or leave it empty.")
     return None
+
+
+def save_ingredient_rows(db, meal_id, rows):
+    db.execute("DELETE FROM meal_ingredients WHERE meal_id = ?", (meal_id,))
+    for position, row in enumerate(rows):
+        db.execute(
+            "INSERT INTO meal_ingredients (meal_id, position, quantity, unit, name) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (meal_id, position, row["quantity"], row["unit"], row["name"]),
+        )
+
+
+def load_ingredient_rows(meal_id):
+    rows = get_db().execute(
+        "SELECT quantity, unit, name FROM meal_ingredients WHERE meal_id = ? ORDER BY position, id",
+        (meal_id,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def ingredient_lines(rows):
+    """Turn saved rows into scaling Lines (a bad quantity is shown unscaled rather than crashing)."""
+    lines = []
+    for r in rows:
+        try:
+            lines.append(scaling.line_from_parts(r["quantity"], r["unit"], r["name"]))
+        except ValueError:
+            lines.append(scaling.line_from_parts("", "", ingredients_text([r])))
+    return lines
 
 
 @app.template_filter("lines")
@@ -237,7 +334,7 @@ def index():
 @app.route("/meals/new", methods=["GET", "POST"])
 def new_meal():
     if request.method == "GET":
-        return render_template("meal_form.html", meal=None, form={}, title="Add Meal")
+        return render_template("meal_form.html", meal=None, form={"rows": []}, title="Add Meal")
 
     form = read_form()
     error = validate_form(form)
@@ -259,6 +356,7 @@ def new_meal():
             (form["name"], form["ingredients"], form["recipe"], photo,
              parse_servings(form["servings"])),
         )
+        save_ingredient_rows(db, cur.lastrowid, form["rows"])
         db.commit()
     except sqlite3.IntegrityError:
         delete_photo(photo)
@@ -272,6 +370,7 @@ def new_meal():
 @app.route("/meals/<int:meal_id>")
 def meal_detail(meal_id):
     meal = get_meal_or_404(meal_id)
+    ingredient_rows = load_ingredient_rows(meal_id)
     guests_text = request.args.get("guests", "").strip()
     guests = rows = factor_text = guests_error = None
     if guests_text:
@@ -280,13 +379,13 @@ def meal_detail(meal_id):
             guests_error = "Number of guests must be a whole number of 1 or more."
         else:
             factor = Fraction(guests, meal["servings"])
-            rows = scaling.scaled_rows(meal["ingredients"], factor)
+            rows = scaling.scaled_rows(ingredient_lines(ingredient_rows), factor)
             factor_text = scaling.format_exact(factor)
     event_count = get_db().execute(
         "SELECT COUNT(*) FROM event_meals WHERE meal_id = ?", (meal_id,)
     ).fetchone()[0]
     return render_template(
-        "meal_detail.html", meal=meal, guests_text=guests_text, guests=guests,
+        "meal_detail.html", meal=meal, ingredient_rows=ingredient_rows, guests_text=guests_text, guests=guests,
         rows=rows, factor_text=factor_text, guests_error=guests_error, event_count=event_count,
     )
 
@@ -295,7 +394,9 @@ def meal_detail(meal_id):
 def edit_meal(meal_id):
     meal = get_meal_or_404(meal_id)
     if request.method == "GET":
-        return render_template("meal_form.html", meal=meal, form=dict(meal), title="Edit Meal")
+        form = dict(meal)
+        form["rows"] = load_ingredient_rows(meal_id)
+        return render_template("meal_form.html", meal=meal, form=form, title="Edit Meal")
 
     form = read_form()
     error = validate_form(form)
@@ -325,6 +426,7 @@ def edit_meal(meal_id):
             (form["name"], form["ingredients"], form["recipe"], photo,
              parse_servings(form["servings"]), meal_id),
         )
+        save_ingredient_rows(db, meal_id, form["rows"])
         db.commit()
     except sqlite3.IntegrityError:
         delete_photo(new_photo)
@@ -392,6 +494,7 @@ def event_meal_rows(event):
     for r in rows:
         item = dict(r)
         item["headcount"] = r["own_guests"] or event["guests"]
+        item["lines"] = ingredient_lines(load_ingredient_rows(r["meal_id"]))
         result.append(item)
     return result
 
@@ -399,7 +502,7 @@ def event_meal_rows(event):
 def build_shopping_list(event):
     meals = event_meal_rows(event)
     rows, not_scaled = scaling.combined_list(
-        (m["name"], m["ingredients"], Fraction(m["headcount"], m["servings"])) for m in meals
+        (m["name"], m["lines"], Fraction(m["headcount"], m["servings"])) for m in meals
     )
     return meals, rows, not_scaled
 

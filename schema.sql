@@ -1,5 +1,6 @@
 -- Creates a fresh, EMPTY database. Running this erases all saved meals and events.
 -- To upgrade an existing database, use `flask --app app migrate` instead.
+DROP TABLE IF EXISTS meal_ingredients;
 DROP TABLE IF EXISTS event_meals;
 DROP TABLE IF EXISTS events;
 DROP TABLE IF EXISTS meals;
@@ -13,6 +14,17 @@ CREATE TABLE meals (
     servings INTEGER NOT NULL DEFAULT 1,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- One row per ingredient. meals.ingredients above keeps a plain-text copy
+-- (one per line) that is rewritten on every save, used for search.
+CREATE TABLE meal_ingredients (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    meal_id INTEGER NOT NULL REFERENCES meals(id) ON DELETE CASCADE,
+    position INTEGER NOT NULL,
+    quantity TEXT NOT NULL DEFAULT '',
+    unit TEXT NOT NULL DEFAULT '',
+    name TEXT NOT NULL
 );
 
 CREATE TABLE events (

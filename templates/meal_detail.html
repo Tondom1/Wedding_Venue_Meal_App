@@ -41,11 +41,17 @@
     <p class="no-print"><a href="{{ url_for('meal_detail', meal_id=meal.id) }}">Show original recipe amounts</a></p>
   {% else %}
     <h2>Ingredients</h2>
-    <ul>
-      {% for item in meal.ingredients | lines %}
-        <li>{{ item }}</li>
-      {% endfor %}
-    </ul>
+    <table>
+      <thead><tr><th>Quantity</th><th>Ingredient</th></tr></thead>
+      <tbody>
+        {% for row in ingredient_rows %}
+          <tr>
+            <td>{{ row.quantity }} {{ row.unit }}</td>
+            <td>{{ row.name }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
   {% endif %}
 
   <h2>Recipe</h2>

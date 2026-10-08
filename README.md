@@ -69,7 +69,9 @@ If you already have saved meals from an earlier version, the app will show an **
 
 This **keeps all your meals**. It saves a backup copy first, named `instance/meals-backup-<date>.db`. It's safe to run more than once.
 
-After upgrading, every existing meal is set to **"Serves 1"**. Open each meal, click **Edit** and enter how many people it really serves.
+The upgrade also moves each meal's old ingredient list into the new **ingredients table**, splitting every line into quantity, unit and name. It's worth opening each meal once to check the split looks right.
+
+After upgrading, any meal that didn't have a "Serves" number yet is set to **"Serves 1"**. Open each meal, click **Edit** and enter how many people it really serves.
 
 ---
 
@@ -95,7 +97,7 @@ When you're finished, go back to the terminal and press **Ctrl + C** to stop the
 
 ## How to use it
 
-- **Add a meal:** click **Add Meal**. Type the name, enter how many people the recipe **serves**, list the ingredients (**one per line, amount first**, for example `2 lb chicken thighs`), add the recipe, and optionally choose a photo. Then click **Save**.
+- **Add a meal:** click **Add Meal**. Type the name, enter how many people the recipe **serves**, fill in the ingredients table (see below), add the recipe, and optionally choose a photo. Then click **Save**.
 - **Find a meal:** use the search box on the home page. You can search by meal name or by an ingredient (for example `chicken`).
 - **See what to buy:** click a meal to see its ingredient list and recipe.
 - **Scale a meal for your guests:** open a meal, type the number of guests in the box and click **Scale**. Each amount is **rounded up** for buying and changed to the handiest unit, with the exact amount in brackets. For example, `13 qt (50 cups)`.
@@ -104,23 +106,21 @@ When you're finished, go back to the terminal and press **Ctrl + C** to stop the
 
 Photos can be PNG, JPG, GIF or WEBP, up to 5 MB.
 
-### Typing ingredients so they scale
+### Entering ingredients
 
-Put the **amount first**, then the unit (optional), then the ingredient, one per line:
+The meal form has an **ingredients table** with one row per ingredient and three boxes:
 
-```
-2 cups rice
-1 1/2 lb chicken thighs
-1/2 tsp salt
-3 eggs
-2 cans crushed tomatoes
-pepper to taste
-```
+| Quantity | Unit | Ingredient |
+|---|---|---|
+| 1 1/2 | lb | chicken thighs |
+| 2 | cups | rice |
+| 3 | | eggs |
+| 2 | can | crushed tomatoes |
+| | | salt to taste |
 
-- Amounts can be whole numbers (`3`), decimals (`1.5`), fractions (`1/2`) or mixed numbers (`1 1/2`).
-- Units the app understands and converts: **tsp, tbsp, cup, fl oz, pt, qt, gal, oz, lb, g, kg, ml, l** (full names like "tablespoons" or "pounds" work too). `oz` means weight; write `fl oz` for liquid ounces.
-- Other words, like `cans` or `cloves`, still scale but aren't converted.
-- A line with no amount at the start, such as "pepper to taste", isn't scaled. It's listed separately so you remember to check it.
+- **Quantity** can be a whole number (`3`), a decimal (`1.5`), a fraction (`1/2`) or a mixed number (`1 1/2`). Leave it **empty** for things like "salt to taste". Those aren't scaled; they're listed separately so you remember to check them.
+- **Unit:** click the box to pick from the suggestions. These units are converted to the handiest size when scaling: **tsp, tbsp, cup, fl oz, pt, qt, gal, oz, lb, g, kg, ml, l**. You can also type your own, like `can` or `clove`. Those still scale but aren't converted. `oz` means weight; use `fl oz` for liquid ounces.
+- Click **+ Add ingredient** for more rows, and **✕** to remove one. Empty rows are ignored when you save.
 - US and metric units are never mixed, and weight is never turned into volume.
 
 ### Events and shopping lists

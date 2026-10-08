@@ -13,7 +13,7 @@ Read this file at the start of every session in this folder. It records what the
 
 ## 2. Current state (as of 2026-10-08)
 
-Phases A–F of section 4 are **built on `dev`** (scaling, guests box, events, combined shopping list, CSV/print). Not yet pushed or released.
+Phases A–F of section 4 are **built and pushed to `dev`** (scaling, guests box, events, combined shopping list, CSV/print). Phase G (ingredient table) is built on `dev` locally. Nothing is released to `main` yet.
 
 
 Everything in `PLAN.md` (Phases 1–6) **is built and working** in `app.py`, `schema.sql` and `templates/`:
@@ -32,7 +32,7 @@ Housekeeping notes:
 
 ## 3. Fixed rules carried over from PLAN.md (always follow)
 
-**Stack, which must not change:** Python + **Flask only** (server-rendered Jinja2), the built-in `sqlite3` module, and Pico.css from the CDN. No other pip packages, no ORM, no JS framework, no build step. Small inline vanilla JS is fine only if it's truly necessary. Prefer plain HTML forms.
+**Stack, which must not change:** Python + **Flask only** (server-rendered Jinja2), the built-in `sqlite3` module, and Pico.css from the CDN. No other pip packages, no ORM, no JS framework, no build step. Small inline vanilla JS is fine only if it's truly necessary (currently just the add/remove buttons on the ingredient table). Prefer plain HTML forms.
 
 **Platform:** Windows. Give commands in **PowerShell** form, e.g. `.\.venv\Scripts\python -m flask --app app run`.
 
@@ -96,7 +96,9 @@ These answers override `PLAN.md`'s "out of scope" line for *ingredient quantity/
 - Any unit word not in the table (`cans`, `cloves`, `bunches`) is just part of the item name. Its amount still scales and rounds up, but it never converts.
 
 ### Ingredient line format
-Keep `ingredients` as plain text, one per line. A line is `<amount> [unit] <item>`:
+> **Superseded by Phase G:** ingredients are now entered in a table and stored as rows in `meal_ingredients`. The line format below still describes how the old text is converted, and how `meals.ingredients` (the plain-text copy kept for search) is written.
+
+Originally, `ingredients` was plain text, one per line. A line is `<amount> [unit] <item>`:
 - the amount can be a whole number `3`, a decimal `1.5`, a fraction `1/2`, or a mixed number `1 1/2`
 - the unit is optional and comes from the table above
 - the item is everything else, kept exactly as typed
@@ -172,6 +174,15 @@ Put the parsing, scaling, conversion, rounding and formatting into **one small m
 - Event: 120 guests, two meals that both use `rice` (one in cups, one in tbsp) produce **one** merged rice row. Removing a meal from the event updates the list. Deleting the event leaves its meals intact.
 - The CSV opens in Excel with correct columns, and the print view hides the nav and buttons.
 - `python -m unittest test_scaling` passes, and all earlier `PLAN.md` acceptance checks still pass.
+
+### Phase G — Ingredient table (owner request, 2026-10-08)
+The owner asked for separate boxes instead of one big text box, so users don't have to type in a special format.
+- [x] G.1 New table `meal_ingredients(id, meal_id → meals ON DELETE CASCADE, position, quantity TEXT, unit TEXT, name TEXT NOT NULL)`. The quantity is stored **as typed** (e.g. `1 1/2`) and parsed when scaling. This table is the source of truth.
+- [x] G.2 `meals.ingredients` is still written on every save, as a one-per-line text copy. It's used for search, and lets `v1-checkpoint` still read the data in a rollback.
+- [x] G.3 `migrate` creates the table and splits each meal's old text into rows (`scaling.split_line`). It's resumable: it converts any meal that has no rows, and the app shows the upgrade page while such meals exist.
+- [x] G.4 Meal form: a Quantity / Unit / Ingredient table with 5 blank rows for a new meal (existing rows + 2 when editing), "+ Add ingredient" and ✕ remove buttons (small inline vanilla JS; empty rows are ignored), and a `<datalist>` of unit suggestions that still allows free text.
+- [x] G.5 Validation: at least one ingredient; every filled row needs a name; the quantity must be empty or a number/fraction. Errors name the row, and the form keeps what was typed.
+- [x] G.6 A unit outside the conversion table (can, clove, bunch…) becomes part of the item name for scaling and merging (`2 can tomatoes` → item "can tomatoes", count).
 
 ## 5. Out of scope unless the owner asks
 User accounts or login, hosting or deployment (all in `future_plans.md`), a REST API, JS frameworks, ORMs, extra pip packages, a meal calendar, pricing or cost estimates, inventory tracking, a waste/extra-% buffer (owner declined), and US↔metric or weight↔volume conversion.

@@ -2,7 +2,8 @@
 import unittest
 from fractions import Fraction as F
 
-from scaling import combined_list, format_amount, parse_line, scale, scaled_rows
+from scaling import (combined_list, format_amount, line_from_parts, parse_line, parse_quantity,
+                     scale, scaled_rows, split_line)
 
 
 def scaled_text(line_text, factor):
@@ -112,6 +113,49 @@ class ListTests(unittest.TestCase):
     def test_combined_keeps_different_kinds_apart(self):
         rows, _ = combined_list([("A", "1 lb sugar", 1), ("B", "1 cup sugar", 1)])
         self.assertEqual(len(rows), 2)
+
+
+
+class TableRowTests(unittest.TestCase):
+    def test_parse_quantity(self):
+        self.assertEqual(parse_quantity("1 1/2"), F(3, 2))
+        self.assertEqual(parse_quantity(" 2 "), 2)
+        self.assertEqual(parse_quantity("½"), F(1, 2))
+        self.assertIsNone(parse_quantity(""))
+        for bad in ["abc", "2 cups", "1/0", "2-3"]:
+            with self.assertRaises(ValueError):
+                parse_quantity(bad)
+
+    def test_line_from_parts(self):
+        line = line_from_parts("1 1/2", "lb", "chicken thighs")
+        self.assertEqual((line.amount, line.unit, line.item), (F(3, 2), "lb", "chicken thighs"))
+        line = line_from_parts("2", "Tablespoons", "butter")
+        self.assertEqual(line.unit, "tbsp")
+        line = line_from_parts("2", "cans", "crushed tomatoes")      # unit we don't convert
+        self.assertEqual((line.unit, line.item), (None, "cans crushed tomatoes"))
+        line = line_from_parts("3", "", "eggs")
+        self.assertEqual((line.amount, line.unit, line.item), (3, None, "eggs"))
+        line = line_from_parts("", "", "pepper to taste")
+        self.assertFalse(line.scaled)
+        self.assertEqual(line.text, "pepper to taste")
+        # a name that looks like a unit must not be mistaken for one
+        line = line_from_parts("2", "", "T-bone steaks")
+        self.assertEqual(line.item, "T-bone steaks")
+
+    def test_rows_scale_like_text(self):
+        lines = [line_from_parts("2", "cups", "rice"), line_from_parts("1/2", "tsp", "salt")]
+        rows = scaled_rows(lines, 25)
+        self.assertEqual([r.amount.text for r in rows], ["13 qt (50 cups)", "5 tbsp (12.5 tsp)"])
+
+    def test_split_old_lines(self):
+        self.assertEqual(split_line("1 1/2 lb chicken thighs"), ("1 1/2", "lb", "chicken thighs"))
+        self.assertEqual(split_line("2 Tablespoons butter"), ("2", "Tablespoons", "butter"))
+        self.assertEqual(split_line("8 fl oz cream"), ("8", "fl oz", "cream"))
+        self.assertEqual(split_line("3 eggs"), ("3", "", "eggs"))
+        self.assertEqual(split_line("2 cans tomatoes"), ("2", "", "cans tomatoes"))
+        self.assertEqual(split_line("½ cup sugar"), ("1/2", "cup", "sugar"))
+        self.assertEqual(split_line("pepper to taste"), ("", "", "pepper to taste"))
+        self.assertEqual(split_line("2 cups"), ("2", "cups", ""))
 
 
 if __name__ == "__main__":

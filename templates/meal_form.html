@@ -1,5 +1,13 @@
 {% extends "base.html" %}
 {% block title %}{{ title }}{% endblock %}
+{% macro ingredient_row(row) %}
+  <tr>
+    <td><input type="text" name="ing_qty" value="{{ row.quantity or '' }}" placeholder="e.g. 1 1/2" aria-label="Quantity" inputmode="decimal"></td>
+    <td><input type="text" name="ing_unit" value="{{ row.unit or '' }}" list="unit-options" placeholder="e.g. cup" aria-label="Unit"></td>
+    <td><input type="text" name="ing_name" value="{{ row.name or '' }}" placeholder="e.g. chicken thighs" aria-label="Ingredient"></td>
+    <td><button type="button" class="secondary outline remove-ingredient" title="Remove this row" aria-label="Remove this row">✕</button></td>
+  </tr>
+{% endmacro %}
 {% block content %}
   <h1>{{ title }}</h1>
   <form method="post" enctype="multipart/form-data">
@@ -14,10 +22,31 @@
       <small>How many people the ingredient amounts below feed.</small>
     </label>
 
-    <label>
-      Ingredients
-      <textarea name="ingredients" rows="8" placeholder="One per line, amount first — e.g. 2 lb chicken thighs" required>{{ form.ingredients or '' }}</textarea>
-    </label>
+    <fieldset>
+      <legend><strong>Ingredients</strong></legend>
+      <small>One ingredient per row. Leave <em>Quantity</em> empty for things like "salt to taste" (they won't be scaled).
+        Pick a unit from the suggestions so it can be converted, or type your own (e.g. cans, cloves).</small>
+      <table class="ingredients">
+        <thead>
+          <tr><th class="col-qty">Quantity</th><th class="col-unit">Unit</th><th>Ingredient</th><th class="col-del"></th></tr>
+        </thead>
+        <tbody id="ingredient-rows">
+          {% set extra = 2 if form.rows else 5 %}
+          {% for row in (form.rows or []) + [{}] * extra %}
+            {{ ingredient_row(row) }}
+          {% endfor %}
+        </tbody>
+      </table>
+      <button type="button" class="secondary outline" id="add-ingredient">+ Add ingredient</button>
+    </fieldset>
+
+    <datalist id="unit-options">
+      {% for u in ["tsp", "tbsp", "cup", "fl oz", "pt", "qt", "gal", "oz", "lb", "g", "kg", "ml", "l",
+                   "can", "clove", "bunch", "head", "package", "piece", "slice", "stick", "pinch"] %}
+        <option value="{{ u }}">
+      {% endfor %}
+    </datalist>
+    <template id="ingredient-row-template">{{ ingredient_row({}) }}</template>
 
     <label>
       Recipe
@@ -39,4 +68,27 @@
 
     <button type="submit">Save</button>
   </form>
+
+  <script>
+    // Small helper for the ingredient table: add a blank row, or remove a row.
+    (function () {
+      var body = document.getElementById("ingredient-rows");
+      var template = document.getElementById("ingredient-row-template");
+      document.getElementById("add-ingredient").addEventListener("click", function () {
+        body.appendChild(template.content.cloneNode(true));
+        var inputs = body.querySelectorAll("tr:last-child input");
+        if (inputs.length) inputs[0].focus();
+      });
+      body.addEventListener("click", function (event) {
+        var button = event.target.closest(".remove-ingredient");
+        if (!button) return;
+        var row = button.closest("tr");
+        if (body.rows.length > 1) {
+          row.remove();
+        } else {
+          row.querySelectorAll("input").forEach(function (input) { input.value = ""; });
+        }
+      });
+    })();
+  </script>
 {% endblock %}
