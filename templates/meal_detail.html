@@ -3,7 +3,7 @@
 {% block title %}{{ meal.name }}{% endblock %}
 {% block content %}
   {% if meal.photo_filename %}
-    <img class="no-print" src="{{ url_for('static', filename='uploads/' ~ meal.photo_filename) }}" alt="{{ meal.name }}" style="max-width: 100%; border-radius: 0.5rem;">
+    <img class="no-print" src="{{ url_for('photo', filename=meal.photo_filename) }}" alt="{{ meal.name }}" style="max-width: 100%; border-radius: 0.5rem;">
   {% endif %}
 
   <h1>{{ meal.name }}</h1>

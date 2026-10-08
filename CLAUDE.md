@@ -13,7 +13,7 @@ Read this file at the start of every session in this folder. It records what the
 
 ## 2. Current state (as of 2026-10-08)
 
-Phases A–F of section 4 are **built and pushed to `dev`** (scaling, guests box, events, combined shopping list, CSV/print). Phase G (ingredient table) is built on `dev` locally. Nothing is released to `main` yet.
+Phases A–G of section 4 (scaling, guests box, events, combined shopping list, CSV/print, ingredient table) and Phase H (desktop application, section 4b) are **built and pushed to `dev`**. Nothing is released to `main` yet.
 
 
 Everything in `PLAN.md` (Phases 1–6) **is built and working** in `app.py`, `schema.sql` and `templates/`:
@@ -27,12 +27,12 @@ Housekeeping notes:
 - The `[ ]` checkboxes in `PLAN.md` were never ticked, even though the work is done. Don't take that to mean the work is missing.
 - `PLAN.md` says the folder is `meal-app/`. The real folder is `C:\Claude Projects\Wedding_Venue_Meal_App`.
 - `PLAN.md` asks for Python 3.10+, but `README.md` says 3.9+ and `__pycache__` shows **Python 3.9** in use. Keep code **3.9-compatible**: no `match`, and no `X | Y` type hints.
-- There is no `instance/` folder in this copy. The owner's real `meals.db` may be in a different copy of the app. Assume real data exists somewhere and treat it as precious.
+- The owner's real data is in **two places**, both precious: `%LOCALAPPDATA%\MealKeeper` (used by `Meal Keeper.exe`, the copy the owner now works in) and `instance/` + `static/uploads/` in this folder (used by `flask run`; copied to the first on 2026-10-08 and separate since).
 - `future_plans.md` (login, CSRF, hosting) is **not started**. Don't work on it unless the owner asks.
 
 ## 3. Fixed rules carried over from PLAN.md (always follow)
 
-**Stack, which must not change:** Python + **Flask only** (server-rendered Jinja2), the built-in `sqlite3` module, and Pico.css from the CDN. No other pip packages, no ORM, no JS framework, no build step. Small inline vanilla JS is fine only if it's truly necessary (currently just the add/remove buttons on the ingredient table). Prefer plain HTML forms.
+**Stack, which must not change:** Python + **Flask only** (server-rendered Jinja2), the built-in `sqlite3` module, and Pico.css from the CDN. No other pip packages, no ORM, no JS framework, no build step. **One exception, approved by the owner on 2026-10-08:** `pywebview` (the app window) and `PyInstaller` (builds the `.exe`), listed in `requirements-desktop.txt` and used only by `desktop.py` and the build command. Small inline vanilla JS is fine only if it's truly necessary (currently just the add/remove buttons on the ingredient table). Prefer plain HTML forms.
 
 **Platform:** Windows. Give commands in **PowerShell** form, e.g. `.\.venv\Scripts\python -m flask --app app run`.
 
@@ -183,6 +183,16 @@ The owner asked for separate boxes instead of one big text box, so users don't h
 - [x] G.4 Meal form: a Quantity / Unit / Ingredient table with 5 blank rows for a new meal (existing rows + 2 when editing), "+ Add ingredient" and ✕ remove buttons (small inline vanilla JS; empty rows are ignored), and a `<datalist>` of unit suggestions that still allows free text.
 - [x] G.5 Validation: at least one ingredient; every filled row needs a name; the quantity must be empty or a number/fraction. Errors name the row, and the form keeps what was typed.
 - [x] G.6 A unit outside the conversion table (can, clove, bunch…) becomes part of the item name for scaling and merging (`2 can tomatoes` → item "can tomatoes", count).
+
+## 4b. Phase H — Desktop application (owner request, 2026-10-08)
+The owner no longer wants to use the app as a website in a browser. They chose a real app window (pywebview + PyInstaller) over a shortcut or a native rewrite. An **iPhone app is a later wish**; nothing here carries over to it, so it will be its own project.
+- [x] H.1 `desktop.py` starts Flask on `127.0.0.1` on a free port in a background thread and shows it in a pywebview window titled "Meal Keeper". Closing the window stops the app.
+- [x] H.2 Data folder: run from source, the app still uses `instance/` and `static/uploads/`. The built `.exe` uses `%LOCALAPPDATA%\MealKeeper` (`meals.db`, `uploads/`, backups), because a one-file `.exe` unpacks into a temporary folder. `MEAL_KEEPER_DATA` overrides the folder (handy for testing against a copy).
+- [x] H.3 Photos are served by a `/photos/<filename>` route from `UPLOAD_FOLDER`, not from `static/`.
+- [x] H.4 `prepare_database()` runs at startup of the desktop app: it creates the database if there is none, or runs the same upgrade as `migrate` (backup first). It never runs `schema.sql` over an existing database.
+- [x] H.5 Build command is in `README.md`; `build/`, `dist/` and `*.spec` are git-ignored. `static/` is deliberately not bundled, so the owner's photos never end up inside the `.exe`.
+- [ ] H.6 Owner to check by eye in the window: delete confirmations, **Print / Save as PDF**, and saving the CSV.
+- Known limit: Pico.css still comes from the CDN, so the app looks unstyled offline. Bundling it locally is not done (owner not asked yet).
 
 ## 5. Out of scope unless the owner asks
 User accounts or login, hosting or deployment (all in `future_plans.md`), a REST API, JS frameworks, ORMs, extra pip packages, a meal calendar, pricing or cost estimates, inventory tracking, a waste/extra-% buffer (owner declined), and US↔metric or weight↔volume conversion.

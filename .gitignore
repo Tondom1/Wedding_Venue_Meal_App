@@ -3,3 +3,6 @@ __pycache__/
 instance/
 static/uploads/*
 !static/uploads/.gitkeep
+build/
+dist/
+*.spec

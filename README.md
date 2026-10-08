@@ -12,6 +12,41 @@ Everything stays on your computer. There's no account, no login and nothing is s
 
 ---
 
+## The Meal Keeper application (the normal way to use it)
+
+Meal Keeper is a regular Windows application. It opens in its own window, with no web browser and no typing of commands.
+
+- **Start it:** double-click **`Meal Keeper.exe`** in the `dist` folder. It takes a few seconds to open.
+- **Put it on your desktop:** right-click `Meal Keeper.exe`, choose **Show more options → Send to → Desktop (create shortcut)**.
+- **Close it:** close the window like any other program.
+
+The first time you start it, Windows may show a blue "Windows protected your PC" box, because the app isn't from a big software company. Click **More info**, then **Run anyway**.
+
+The app sets itself up. A brand-new copy starts with an empty meal list, and an older database is upgraded automatically (a backup copy is saved first).
+
+The computer needs an internet connection for the app to look right, because the page styling is loaded from the internet. Your meals are never sent anywhere.
+
+### Giving the application to another computer
+
+Copy `Meal Keeper.exe` to the other Windows computer. Nothing else needs to be installed. It starts with an empty meal list there; to bring your meals along, also copy the data folder described in "Where your data is stored".
+
+### Rebuilding the application after a change
+
+The `.exe` is a snapshot. If the app's code is changed, build a new one. This needs Python (sections 1 and 2 below). In PowerShell, inside the app folder:
+
+```powershell
+.\.venv\Scripts\python -m pip install -r requirements-desktop.txt
+.\.venv\Scripts\python -m PyInstaller --noconfirm --clean --onefile --windowed --name "Meal Keeper" --add-data "templates;templates" --add-data "schema.sql;." desktop.py
+```
+
+Close Meal Keeper before building. The new `Meal Keeper.exe` replaces the old one in `dist`. **Your saved meals are not touched**, because they're kept in a separate folder.
+
+---
+
+> **Sections 1 to 3 below are the older way**, running the app from this folder and viewing it in a web browser. You only need them to rebuild the application or to try out a change before building.
+
+---
+
 ## 1. Install Python (one time)
 
 You need **Python 3.9 or newer**.
@@ -136,16 +171,21 @@ Ingredients only combine when they're **spelled the same way** in every meal. "c
 
 ## Where your data is stored
 
-- Meals and events are saved in `instance/meals.db`.
-- Photos are saved in `static/uploads/`.
+**The Meal Keeper application** keeps everything in one folder:
 
-To **back up** your meals, copy those two folders somewhere safe.
+```
+%LOCALAPPDATA%\MealKeeper
+```
+
+To open it, paste that line into the address bar at the top of File Explorer and press Enter. Meals and events are in `meals.db`, and photos are in `uploads`. To **back up** your meals, close Meal Keeper and copy the whole `MealKeeper` folder somewhere safe.
+
+**The older browser way** (sections 1 to 3) keeps its own, separate copy in this app folder: `instance/meals.db` and photos in `static/uploads/`. A meal added in one does **not** appear in the other.
 
 ---
 
-## Sharing this app with someone else
+## Sharing this app's folder with someone else
 
-Before you send the folder, **delete these folders from the copy you send**:
+To share just the finished application, see "Giving the application to another computer" near the top. To send the whole folder instead, **delete these folders from the copy you send**:
 - `.venv/`: it only works on the computer it was created on. The other person creates their own in step 2.
 - `instance/`: this holds **your** meals. Leave it out so they start with an empty list.
 - Any photos in `static/uploads/` (keep the `.gitkeep` file).
@@ -155,6 +195,9 @@ They can then follow this README from step 1.
 ---
 
 ## Troubleshooting
+
+- **Meal Keeper opens but looks plain and unstyled:** the computer is offline. Your meals are fine; connect to the internet and reopen it.
+- **Meal Keeper opens with no meals:** it is reading `%LOCALAPPDATA%\MealKeeper`. Check that your `meals.db` is in that folder.
 
 - **`python` is not recognized:** Python isn't installed or wasn't added to PATH. Reinstall it and tick "Add python.exe to PATH". On Mac, try `python3`.
 - **`no such table: meals`:** you skipped the `init-db` step in section 2.

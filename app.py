@@ -4,6 +4,7 @@ import os
 import re
 import shutil
 import sqlite3
+import sys
 import uuid
 from datetime import datetime
 from fractions import Fraction
@@ -18,17 +19,28 @@ from flask import (
     redirect,
     render_template,
     request,
+    send_from_directory,
     url_for,
 )
 from werkzeug.utils import secure_filename
 
 import scaling
 
-app = Flask(__name__, instance_relative_config=True)
+# Where meals.db and the photos live. Run from this folder, that is instance/ and
+# static/uploads/ as always. The built desktop app (Meal Keeper.exe) unpacks itself into a
+# temporary folder each time it starts, so it keeps its data in a permanent folder instead.
+DATA_DIR = os.environ.get("MEAL_KEEPER_DATA")
+if not DATA_DIR and getattr(sys, "frozen", False):
+    DATA_DIR = os.path.join(os.environ.get("LOCALAPPDATA") or os.path.expanduser("~"), "MealKeeper")
+if DATA_DIR:
+    DATA_DIR = os.path.abspath(DATA_DIR)
+
+app = Flask(__name__, instance_path=DATA_DIR, instance_relative_config=True)
 app.config.update(
     SECRET_KEY=os.environ.get("SECRET_KEY", "dev-change-me"),
     DATABASE=os.path.join(app.instance_path, "meals.db"),
-    UPLOAD_FOLDER=os.path.join(app.root_path, "static", "uploads"),
+    UPLOAD_FOLDER=(os.path.join(DATA_DIR, "uploads") if DATA_DIR
+                   else os.path.join(app.root_path, "static", "uploads")),
     MAX_CONTENT_LENGTH=5 * 1024 * 1024,
 )
 os.makedirs(app.instance_path, exist_ok=True)
@@ -147,19 +159,34 @@ def migrate_command():
     if not needs_migration(db):
         print("Database is already up to date. Nothing to do.")
         return
+    for message in upgrade_database(db):
+        print(message)
 
-    backup = backup_database()
-    print(f"Backup saved to {backup}")
 
+def upgrade_database(db):
+    """Back up, then bring an older database up to date. Returns what was done, as messages."""
+    messages = [f"Backup saved to {backup_database()}"]
     if "servings" not in meal_columns(db):
         db.execute("ALTER TABLE meals ADD COLUMN servings INTEGER NOT NULL DEFAULT 1")
-        print("Added 'servings' to meals (existing meals set to 1 - please edit each meal to set the real number).")
+        messages.append("Added 'servings' to meals (existing meals set to 1 - please edit each meal to set the real number).")
     db.executescript(EVENT_TABLES_SQL)
     count = convert_ingredient_text_to_rows(db)
     if count:
-        print(f"Moved the ingredients of {count} meal(s) into the new ingredient table.")
+        messages.append(f"Moved the ingredients of {count} meal(s) into the new ingredient table.")
     db.commit()
-    print("Database upgraded.")
+    messages.append("Database upgraded.")
+    return messages
+
+
+def prepare_database():
+    """For the desktop app, which has no command line: create the database the first time,
+    or upgrade an older one (a backup is saved first). Existing meals are never erased."""
+    path = app.config["DATABASE"]
+    with app.app_context():
+        if not os.path.exists(path) or os.path.getsize(path) == 0:
+            init_db()
+        elif needs_migration(get_db()):
+            upgrade_database(get_db())
 
 
 def convert_ingredient_text_to_rows(db):
@@ -216,6 +243,11 @@ def delete_photo(filename):
     path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
     if os.path.isfile(path):
         os.remove(path)
+
+
+@app.route("/photos/<filename>")
+def photo(filename):
+    return send_from_directory(app.config["UPLOAD_FOLDER"], filename)
 
 
 # ---------- Helpers ----------
