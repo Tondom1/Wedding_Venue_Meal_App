@@ -13,7 +13,7 @@ Read this file at the start of every session in this folder. It records what the
 
 ## 2. Current state (as of 2026-10-08)
 
-Phases A–G of section 4 (scaling, guests box, events, combined shopping list, CSV/print, ingredient table) and Phase H (desktop application, section 4b) are **built and released**. Release **`v00.01.00`** (2026-10-08) is on `main`, with `Event Shopping List.exe` attached to its GitHub release page. Releases are tagged `vNN.NN.NN`; the repository is private.
+Phases A–G of section 4 (scaling, guests box, events, combined shopping list, CSV/print, ingredient table) and Phase H (desktop application, section 4b) are **built and released**. Release **`v00.01.00`** (2026-10-08) is on `main`, with `Event Shopping List.exe` attached to its GitHub release page. Releases are tagged `vNN.NN.NN`. The repository is **public** (since 2026-10-08), so anything pushed can be read by anyone.
 
 
 Everything in `PLAN.md` (Phases 1–6) **is built and working** in `app.py`, `schema.sql` and `templates/`:
@@ -41,6 +41,7 @@ Housekeeping notes:
 - Local commits on `dev` are fine. **Do not push anything to GitHub until the owner says it looks good.**
 - **Never commit, merge or push to `main` unless the owner says a release is ready.** `main` holds releases only.
 - `v1-checkpoint` is a frozen copy of the original working app. Never change it.
+- **Public repository, private email:** on 2026-10-08 the repository was re-created with a rewritten history so the owner's personal email is not in any commit (file contents unchanged, commit IDs changed, the old pull request #1 is gone). Commits in this folder use the GitHub no-reply address set in the repo's own Git config (`git config user.email`); check it before committing and never commit with a personal email. Never commit meals, photos, backups or anything personal. The original repository is kept as the private backup `Tondom1/Wedding_Venue_Meal_App-old`; do not push to it or make it public.
 - How to push when approved: when running in **Claude Code on the owner's computer**, just `git push origin dev` (the owner's own Git login is used). Only if working from a cloud session linked to the computer, which has no GitHub login there: make a bundle on the computer (`git bundle create x.bundle origin/dev..dev`), stage it into the cloud workspace, fetch it into a clone there, push from the clone, then delete the bundle file from the owner's folder.
 - Line endings: the repo stores LF, and the owner's Windows Git converts on checkout. A file that differs only by CRLF isn't a real change (`git diff --ignore-cr-at-eol`).
 
