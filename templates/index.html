@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block content %}
+  <form method="get" action="{{ url_for('index') }}" role="search">
+    <input type="search" name="q" value="{{ q }}" placeholder="Search by meal or ingredient">
+    <button type="submit">Search</button>
+  </form>
+
+  {% if meals %}
+    <div class="meal-grid">
+      {% for meal in meals %}
+        <article>
+          <a href="{{ url_for('meal_detail', meal_id=meal.id) }}">
+            {% if meal.photo_filename %}
+              <img class="thumb" src="{{ url_for('static', filename='uploads/' ~ meal.photo_filename) }}" alt="{{ meal.name }}">
+            {% endif %}
+            <strong>{{ meal.name }}</strong>
+          </a>
+        </article>
+      {% endfor %}
+    </div>
+  {% elif q %}
+    <p>No meals match "{{ q }}". <a href="{{ url_for('index') }}">Clear search</a></p>
+  {% else %}
+    <p>No meals yet — <a href="{{ url_for('new_meal') }}">add one!</a></p>
+  {% endif %}
+
+  {% if q and meals %}
+    <p><a href="{{ url_for('index') }}">Clear search</a></p>
+  {% endif %}
+{% endblock %}

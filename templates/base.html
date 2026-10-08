@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Meals{% endblock %}</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  <style>
+    .thumb { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 0.5rem; }
+    .meal-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1rem; }
+    .meal-grid article { margin: 0; }
+    .recipe { white-space: pre-wrap; }
+    .flash-error { color: var(--pico-del-color); }
+    .flash-success { color: var(--pico-ins-color); }
+  </style>
+</head>
+<body>
+  <main class="container">
+    <nav>
+      <ul><li><strong>Meals</strong></li></ul>
+      <ul>
+        <li><a href="{{ url_for('index') }}">Meals</a></li>
+        <li><a href="{{ url_for('new_meal') }}">Add Meal</a></li>
+      </ul>
+    </nav>
+    {% for category, message in get_flashed_messages(with_categories=true) %}
+      <article class="flash-{{ category }}">{{ message }}</article>
+    {% endfor %}
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

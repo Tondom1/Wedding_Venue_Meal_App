@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+  <h1>{{ title }}</h1>
+  <form method="post" enctype="multipart/form-data">
+    <label>
+      Name
+      <input type="text" name="name" value="{{ form.name or '' }}" required>
+    </label>
+
+    <label>
+      Ingredients
+      <textarea name="ingredients" rows="8" placeholder="One ingredient per line" required>{{ form.ingredients or '' }}</textarea>
+    </label>
+
+    <label>
+      Recipe
+      <textarea name="recipe" rows="10">{{ form.recipe or '' }}</textarea>
+    </label>
+
+    {% if meal and meal.photo_filename %}
+      <img class="thumb" style="max-width: 200px;" src="{{ url_for('static', filename='uploads/' ~ meal.photo_filename) }}" alt="Current photo">
+      <label>
+        <input type="checkbox" name="remove_photo" value="1">
+        Remove photo
+      </label>
+    {% endif %}
+
+    <label>
+      Photo (optional)
+      <input type="file" name="photo" accept="image/*">
+    </label>
+
+    <button type="submit">Save</button>
+  </form>
+{% endblock %}
