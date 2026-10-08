@@ -1,4 +1,4 @@
-# Meal Keeper
+# Event Shopping List
 
 A simple app that runs on your own computer for saving your meals. For each meal you can store:
 - a name
@@ -12,12 +12,12 @@ Everything stays on your computer. There's no account, no login and nothing is s
 
 ---
 
-## The Meal Keeper application (the normal way to use it)
+## The Event Shopping List application (the normal way to use it)
 
-Meal Keeper is a regular Windows application. It opens in its own window, with no web browser and no typing of commands.
+Event Shopping List is a regular Windows application. It opens in its own window, with no web browser and no typing of commands.
 
-- **Start it:** double-click **`Meal Keeper.exe`** in the `dist` folder. It takes a few seconds to open.
-- **Put it on your desktop:** right-click `Meal Keeper.exe`, choose **Show more options → Send to → Desktop (create shortcut)**.
+- **Start it:** double-click **`Event Shopping List.exe`** in the `dist` folder. It takes a few seconds to open.
+- **Put it on your desktop:** right-click `Event Shopping List.exe`, choose **Show more options → Send to → Desktop (create shortcut)**.
 - **Close it:** close the window like any other program.
 
 The first time you start it, Windows may show a blue "Windows protected your PC" box, because the app isn't from a big software company. Click **More info**, then **Run anyway**.
@@ -28,7 +28,7 @@ The computer needs an internet connection for the app to look right, because the
 
 ### Giving the application to another computer
 
-Copy `Meal Keeper.exe` to the other Windows computer. Nothing else needs to be installed. It starts with an empty meal list there; to bring your meals along, also copy the data folder described in "Where your data is stored".
+Copy `Event Shopping List.exe` to the other Windows computer. Nothing else needs to be installed. It starts with an empty meal list there; to bring your meals along, also copy the data folder described in "Where your data is stored".
 
 ### Rebuilding the application after a change
 
@@ -36,10 +36,10 @@ The `.exe` is a snapshot. If the app's code is changed, build a new one. This ne
 
 ```powershell
 .\.venv\Scripts\python -m pip install -r requirements-desktop.txt
-.\.venv\Scripts\python -m PyInstaller --noconfirm --clean --onefile --windowed --name "Meal Keeper" --add-data "templates;templates" --add-data "schema.sql;." desktop.py
+.\.venv\Scripts\python -m PyInstaller --noconfirm --clean --onefile --windowed --name "Event Shopping List" --add-data "templates;templates" --add-data "schema.sql;." desktop.py
 ```
 
-Close Meal Keeper before building. The new `Meal Keeper.exe` replaces the old one in `dist`. **Your saved meals are not touched**, because they're kept in a separate folder.
+Close Event Shopping List before building. The new `Event Shopping List.exe` replaces the old one in `dist`. **Your saved meals are not touched**, because they're kept in a separate folder.
 
 ---
 
@@ -171,13 +171,13 @@ Ingredients only combine when they're **spelled the same way** in every meal. "c
 
 ## Where your data is stored
 
-**The Meal Keeper application** keeps everything in one folder:
+**The Event Shopping List application** keeps everything in one folder:
 
 ```
 %LOCALAPPDATA%\MealKeeper
 ```
 
-To open it, paste that line into the address bar at the top of File Explorer and press Enter. Meals and events are in `meals.db`, and photos are in `uploads`. To **back up** your meals, close Meal Keeper and copy the whole `MealKeeper` folder somewhere safe.
+To open it, paste that line into the address bar at the top of File Explorer and press Enter. Meals and events are in `meals.db`, and photos are in `uploads`. To **back up** your meals, close Event Shopping List and copy the whole `MealKeeper` folder somewhere safe.
 
 **The older browser way** (sections 1 to 3) keeps its own, separate copy in this app folder: `instance/meals.db` and photos in `static/uploads/`. A meal added in one does **not** appear in the other.
 
@@ -196,8 +196,8 @@ They can then follow this README from step 1.
 
 ## Troubleshooting
 
-- **Meal Keeper opens but looks plain and unstyled:** the computer is offline. Your meals are fine; connect to the internet and reopen it.
-- **Meal Keeper opens with no meals:** it is reading `%LOCALAPPDATA%\MealKeeper`. Check that your `meals.db` is in that folder.
+- **Event Shopping List opens but looks plain and unstyled:** the computer is offline. Your meals are fine; connect to the internet and reopen it.
+- **Event Shopping List opens with no meals:** it is reading `%LOCALAPPDATA%\MealKeeper`. Check that your `meals.db` is in that folder.
 
 - **`python` is not recognized:** Python isn't installed or wasn't added to PATH. Reinstall it and tick "Add python.exe to PATH". On Mac, try `python3`.
 - **`no such table: meals`:** you skipped the `init-db` step in section 2.

@@ -27,7 +27,7 @@ from werkzeug.utils import secure_filename
 import scaling
 
 # Where meals.db and the photos live. Run from this folder, that is instance/ and
-# static/uploads/ as always. The built desktop app (Meal Keeper.exe) unpacks itself into a
+# static/uploads/ as always. The built desktop app (Event Shopping List.exe) unpacks itself into a
 # temporary folder each time it starts, so it keeps its data in a permanent folder instead.
 DATA_DIR = os.environ.get("MEAL_KEEPER_DATA")
 if not DATA_DIR and getattr(sys, "frozen", False):

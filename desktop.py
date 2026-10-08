@@ -1,7 +1,7 @@
-"""Meal Keeper as a desktop application: the app in its own window, no browser or terminal.
+"""Event Shopping List as a desktop application: the app in its own window, no browser or terminal.
 
 Run it from this folder with:  .\\.venv\\Scripts\\python desktop.py
-or build "Meal Keeper.exe" (see README.md).
+or build "Event Shopping List.exe" (see README.md).
 """
 import os
 import threading
@@ -22,7 +22,7 @@ def main():
 
     webview.settings["ALLOW_DOWNLOADS"] = True  # the CSV shopping list
     webview.create_window(
-        "Meal Keeper", f"http://127.0.0.1:{server.server_port}/",
+        "Event Shopping List", f"http://127.0.0.1:{server.server_port}/",
         width=1100, height=800, min_size=(480, 480),
     )
     webview.start()  # returns when the window is closed

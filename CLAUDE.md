@@ -27,7 +27,7 @@ Housekeeping notes:
 - The `[ ]` checkboxes in `PLAN.md` were never ticked, even though the work is done. Don't take that to mean the work is missing.
 - `PLAN.md` says the folder is `meal-app/`. The real folder is `C:\Claude Projects\Wedding_Venue_Meal_App`.
 - `PLAN.md` asks for Python 3.10+, but `README.md` says 3.9+ and `__pycache__` shows **Python 3.9** in use. Keep code **3.9-compatible**: no `match`, and no `X | Y` type hints.
-- The owner's real data is in **two places**, both precious: `%LOCALAPPDATA%\MealKeeper` (used by `Meal Keeper.exe`, the copy the owner now works in) and `instance/` + `static/uploads/` in this folder (used by `flask run`; copied to the first on 2026-10-08 and separate since).
+- The owner's real data is in **two places**, both precious: `%LOCALAPPDATA%\MealKeeper` (used by `Event Shopping List.exe`, the copy the owner now works in) and `instance/` + `static/uploads/` in this folder (used by `flask run`; copied to the first on 2026-10-08 and separate since).
 - `future_plans.md` (login, CSRF, hosting) is **not started**. Don't work on it unless the owner asks.
 
 ## 3. Fixed rules carried over from PLAN.md (always follow)
@@ -186,12 +186,13 @@ The owner asked for separate boxes instead of one big text box, so users don't h
 
 ## 4b. Phase H — Desktop application (owner request, 2026-10-08)
 The owner no longer wants to use the app as a website in a browser. They chose a real app window (pywebview + PyInstaller) over a shortcut or a native rewrite. An **iPhone app is a later wish**; nothing here carries over to it, so it will be its own project.
-- [x] H.1 `desktop.py` starts Flask on `127.0.0.1` on a free port in a background thread and shows it in a pywebview window titled "Meal Keeper". Closing the window stops the app.
+- [x] H.1 `desktop.py` starts Flask on `127.0.0.1` on a free port in a background thread and shows it in a pywebview window titled "Event Shopping List". Closing the window stops the app.
 - [x] H.2 Data folder: run from source, the app still uses `instance/` and `static/uploads/`. The built `.exe` uses `%LOCALAPPDATA%\MealKeeper` (`meals.db`, `uploads/`, backups), because a one-file `.exe` unpacks into a temporary folder. `MEAL_KEEPER_DATA` overrides the folder (handy for testing against a copy).
 - [x] H.3 Photos are served by a `/photos/<filename>` route from `UPLOAD_FOLDER`, not from `static/`.
 - [x] H.4 `prepare_database()` runs at startup of the desktop app: it creates the database if there is none, or runs the same upgrade as `migrate` (backup first). It never runs `schema.sql` over an existing database.
 - [x] H.5 Build command is in `README.md`; `build/`, `dist/` and `*.spec` are git-ignored. `static/` is deliberately not bundled, so the owner's photos never end up inside the `.exe`.
 - [ ] H.6 Owner to check by eye in the window: delete confirmations, **Print / Save as PDF**, and saving the CSV.
+- Name: the owner renamed the app from "Meal Keeper" to **"Event Shopping List"** on 2026-10-08 (the `.exe`, window title and README). The data folder is still `%LOCALAPPDATA%\MealKeeper` on purpose: renaming it would make the saved meals seem to vanish.
 - Known limit: Pico.css still comes from the CDN, so the app looks unstyled offline. Bundling it locally is not done (owner not asked yet).
 
 ## 5. Out of scope unless the owner asks
